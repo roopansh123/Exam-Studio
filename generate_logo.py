@@ -4,6 +4,41 @@ import sqlite3
 import subprocess
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
+def get_bold_font(font_size):
+    candidates = []
+    if sys.platform == 'win32':
+        windir = os.environ.get('WINDIR', r'C:\Windows')
+        candidates.extend([
+            os.path.join(windir, 'Fonts', 'arialbd.ttf'),
+            os.path.join(windir, 'Fonts', 'calibrib.ttf'),
+            os.path.join(windir, 'Fonts', 'segoeuib.ttf'),
+            os.path.join(windir, 'Fonts', 'arial.ttf'),
+            'arialbd.ttf',
+            'arial.ttf',
+        ])
+    elif sys.platform == 'darwin':
+        candidates.extend([
+            '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+            '/System/Library/Fonts/HelveticaNeue.ttc',
+            '/Library/Fonts/Arial Bold.ttf',
+            '/System/Library/Fonts/SFNS.ttf',
+        ])
+    else:
+        candidates.extend([
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+        ])
+    for c in candidates:
+        try:
+            return ImageFont.truetype(c, font_size)
+        except Exception:
+            pass
+    try:
+        return ImageFont.truetype('arial.ttf', font_size)
+    except Exception:
+        pass
+    return ImageFont.load_default()
+
 def create_lk_logo(size=1024):
     img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     margin = int(size * 0.045)
@@ -33,14 +68,7 @@ def create_lk_logo(size=1024):
     bdraw.rounded_rectangle(inner_box, radius=r - int(size * 0.015), outline=(96, 165, 250, 100), width=int(size * 0.008))
 
     # Bold LK font
-    font_path = '/System/Library/Fonts/Supplemental/Arial Bold.ttf'
-    if not os.path.exists(font_path):
-        font_path = '/System/Library/Fonts/HelveticaNeue.ttc'
-
-    try:
-        font = ImageFont.truetype(font_path, int(size * 0.52))
-    except Exception:
-        font = ImageFont.load_default()
+    font = get_bold_font(int(size * 0.52))
 
     text = 'LK'
     bbox = bdraw.textbbox((0, 0), text, font=font)
@@ -61,11 +89,62 @@ def create_lk_logo(size=1024):
     tdraw.text((pos_x, pos_y), text, font=font, fill=(255, 255, 255, 255))
     return img
 
+def create_inno_setup_bitmaps(base_logo):
+    # 1. wizard_small.bmp (138x140 px header icon for Inno Setup)
+    w_small = Image.new('RGB', (138, 140), (255, 255, 255))
+    logo_small = base_logo.resize((120, 120), Image.Resampling.LANCZOS)
+    w_small.paste(logo_small, ((138 - 120) // 2, (140 - 120) // 2), logo_small)
+    w_small.save('wizard_small.bmp', format='BMP')
+
+    # 2. wizard_large.bmp (410x797 px banner for Inno Setup Welcome/Finish pages)
+    w_large = Image.new('RGB', (410, 797), (23, 37, 84))
+    ldraw = ImageDraw.Draw(w_large)
+
+    # Vertical royal blue gradient
+    for y in range(797):
+        ratio = y / 797.0
+        r = int(30 * (1 - ratio) + 15 * ratio)
+        g = int(58 * (1 - ratio) + 23 * ratio)
+        b = int(138 * (1 - ratio) + 68 * ratio)
+        ldraw.line([(0, y), (410, y)], fill=(r, g, b))
+
+    # Center 220x220 logo
+    logo_banner = base_logo.resize((220, 220), Image.Resampling.LANCZOS)
+    w_large.paste(logo_banner, ((410 - 220) // 2, 160), logo_banner)
+
+    font_title = get_bold_font(28)
+    font_sub = get_bold_font(16)
+    font_desc = get_bold_font(13)
+
+    # Title
+    text_title = 'LKCS'
+    t_bbox = ldraw.textbbox((0, 0), text_title, font=font_title)
+    ldraw.text(((410 - (t_bbox[2] - t_bbox[0])) // 2, 420), text_title, font=font_title, fill=(255, 255, 255))
+
+    text_title2 = 'Exam Studio'
+    t2_bbox = ldraw.textbbox((0, 0), text_title2, font=font_title)
+    ldraw.text(((410 - (t2_bbox[2] - t2_bbox[0])) // 2, 460), text_title2, font=font_title, fill=(147, 197, 253))
+
+    # Subtitle
+    text_sub = 'Lord Krishna Convent School'
+    s_bbox = ldraw.textbbox((0, 0), text_sub, font=font_sub)
+    ldraw.text(((410 - (s_bbox[2] - s_bbox[0])) // 2, 530), text_sub, font=font_sub, fill=(224, 231, 255))
+
+    # Description
+    text_desc = 'Question Paper & Assessment Suite'
+    d_bbox = ldraw.textbbox((0, 0), text_desc, font=font_desc)
+    ldraw.text(((410 - (d_bbox[2] - d_bbox[0])) // 2, 560), text_desc, font=font_desc, fill=(191, 219, 254))
+
+    w_large.save('wizard_large.bmp', format='BMP')
+
 def main():
     icon_1024 = create_lk_logo(1024)
     icon_1024.save('app_icon.png')
 
-    # Windows ICO
+    # Inno Setup wizard branding images
+    create_inno_setup_bitmaps(icon_1024)
+
+    # Windows ICO with 7 standard multi-resolution frames
     ico_sizes = [(16,16), (24,24), (32,32), (48,48), (64,64), (128,128), (256,256)]
     icon_1024.save('app_icon.ico', format='ICO', sizes=ico_sizes)
 
@@ -102,7 +181,7 @@ def main():
             conn.execute("UPDATE school_settings SET logo_path = ? WHERE id = 1", (logo_png,))
             conn.commit()
             conn.close()
-    print('LK logo and application icons generated successfully!')
+    print('LK logo, wizard bitmaps, and application icons generated successfully!')
 
 if __name__ == '__main__':
     main()

@@ -3,7 +3,7 @@
 
 #define MyAppName "LKCS Exam Studio"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "Lord Krishna Convent School"
+#define MyAppPublisher "Roopansh Sethi"
 #define MyAppURL "https://lkcs.edu.in"
 #define MyAppExeName "LKCSExamStudio.exe"
 
@@ -29,6 +29,10 @@ OutputDir=dist\installer
 OutputBaseFilename=LKCSExamStudio_Setup
 SetupIconFile=app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
+
+; Setup wizard branding images
+WizardImageFile=wizard_large.bmp
+WizardSmallImageFile=wizard_small.bmp
 
 ; Compression
 Compression=lzma2/ultra64
