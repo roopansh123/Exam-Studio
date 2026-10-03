@@ -92,3 +92,4 @@ The included workflow [`.github/workflows/build.yml`](.github/workflows/build.ym
 - **Sample Teacher Login**:
   - Email: `sharma@school.edu`
   - PIN: `1234`
+# LKCS-Exam-Studio
