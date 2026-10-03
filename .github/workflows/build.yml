@@ -28,10 +28,9 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Initialize Database & Logo
+      - name: Initialize Database
         run: |
           python -m app.database
-          python generate_logo.py
 
       - name: Build Windows Executable with PyInstaller
         run: |
@@ -85,10 +84,9 @@ jobs:
           pip install pyinstaller
           brew install create-dmg || true
 
-      - name: Initialize Database & Logo
+      - name: Initialize Database
         run: |
           python3 -m app.database
-          python3 generate_logo.py
 
       - name: Build macOS App & DMG
         run: |
