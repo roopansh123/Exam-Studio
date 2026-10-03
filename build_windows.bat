@@ -64,24 +64,46 @@ echo Compiling LKCSExamStudio.exe...
 :check_result
 
 echo.
-echo [Step 3/3] Verifying output...
-if exist "dist\LKCSExamStudio.exe" (
+echo [Step 3/4] Verifying standalone executable...
+if not exist "dist\LKCSExamStudio.exe" (
     echo.
-    echo ========================================================
-    echo   BUILD SUCCESSFUL!
-    echo   Your new app is located at:
-    echo   dist\LKCSExamStudio.exe
-    echo.
-    echo   Features included:
-    echo   * Lord Krishna Convent School branding & Blue LK Icon
-    echo   * Fixed Windows startup sync (no more ERR_CONNECTION_REFUSED)
-    echo   * MCQ base font size auto-scaling
-    echo   * Admin Blueprint optional section column
-    echo ========================================================
-) else (
-    echo.
-    echo [ERROR] Build failed. Please review the PyInstaller messages above.
+    echo [ERROR] Build failed. dist\LKCSExamStudio.exe was not created.
+    pause
+    exit /b 1
 )
+
+echo [Step 4/4] Building Windows Setup Installer (Inno Setup)...
+set "ISCC_PATH=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if not exist "!ISCC_PATH!" (
+    set "ISCC_PATH=C:\Program Files\Inno Setup 6\ISCC.exe"
+)
+where iscc >nul 2>&1
+if !ERRORLEVEL! EQU 0 (
+    iscc installer.iss
+) else if exist "!ISCC_PATH!" (
+    "!ISCC_PATH!" installer.iss
+) else (
+    echo [NOTE] Inno Setup compiler (iscc.exe) not found on this PC.
+    echo Standalone executable is ready at dist\LKCSExamStudio.exe!
+    echo To build the Setup wizard, install Inno Setup from https://jrsoftware.org/isdl.php
+)
+
+echo.
+echo ========================================================
+echo   BUILD COMPLETE!
+echo.
+if exist "dist\installer\LKCSExamStudio_Setup.exe" (
+    echo   Setup Installer:  dist\installer\LKCSExamStudio_Setup.exe
+)
+echo   Standalone .EXE:  dist\LKCSExamStudio.exe
+echo.
+echo   Features included:
+echo   * Lord Krishna Convent School branding & Blue LK Icon
+echo   * Desktop shortcut & Start Menu integration
+echo   * Fixed Windows startup sync (no more ERR_CONNECTION_REFUSED)
+echo   * MCQ base font size auto-scaling
+echo   * Admin Blueprint optional section column
+echo ========================================================
 
 echo.
 pause

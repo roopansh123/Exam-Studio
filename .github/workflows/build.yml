@@ -37,7 +37,28 @@ jobs:
         run: |
           pyinstaller --clean --noconfirm LKCSExamStudio.spec
 
-      - name: Upload Windows EXE Artifact
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress
+
+      - name: Build Windows Setup Wizard (Inno Setup)
+        run: |
+          if (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe") {
+              & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          } elseif (Get-Command iscc -ErrorAction SilentlyContinue) {
+              iscc installer.iss
+          } else {
+              Write-Error "ISCC compiler not found!"
+              exit 1
+          }
+
+      - name: Upload Windows Setup Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LKCSExamStudio-Windows-Setup-Installer
+          path: dist/installer/LKCSExamStudio_Setup.exe
+
+      - name: Upload Windows Standalone EXE Artifact
         uses: actions/upload-artifact@v4
         with:
           name: LKCSExamStudio-Windows-EXE
