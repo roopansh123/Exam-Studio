@@ -63,18 +63,19 @@ jobs:
           name: LKCSExamStudio-Windows-EXE
           path: dist/LKCSExamStudio.exe
 
-  # ----------------- macOS BUILD (.dmg) -----------------
-  build-macos:
-    runs-on: macos-latest
+  # ----------------- macOS INTEL BUILD (x86_64 .dmg) -----------------
+  build-macos-intel:
+    runs-on: macos-13
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.11 (x86_64)
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          architecture: "x64"
           cache: "pip"
 
       - name: Install Dependencies
@@ -88,13 +89,50 @@ jobs:
         run: |
           python3 -m app.database
 
-      - name: Build macOS App & DMG
+      - name: Build macOS Intel App & DMG
         run: |
           chmod +x build_mac.sh
-          ./build_mac.sh
+          ./build_mac.sh LKCSExamStudio-macOS-Intel
 
-      - name: Upload macOS DMG Artifact
+      - name: Upload macOS Intel DMG Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LKCSExamStudio-macOS-DMG
-          path: dist/LKCSExamStudio.dmg
+          name: LKCSExamStudio-macOS-Intel-DMG
+          path: dist/LKCSExamStudio-macOS-Intel.dmg
+
+  # ----------------- macOS APPLE SILICON BUILD (arm64 .dmg) -----------------
+  build-macos-arm64:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11 (arm64)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "arm64"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          brew install create-dmg || true
+
+      - name: Initialize Database
+        run: |
+          python3 -m app.database
+
+      - name: Build macOS Apple Silicon App & DMG
+        run: |
+          chmod +x build_mac.sh
+          ./build_mac.sh LKCSExamStudio-macOS-AppleSilicon
+
+      - name: Upload macOS Apple Silicon DMG Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LKCSExamStudio-macOS-AppleSilicon-DMG
+          path: dist/LKCSExamStudio-macOS-AppleSilicon.dmg

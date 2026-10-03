@@ -34,8 +34,9 @@ fi
 echo "Created dist/LKCSExamStudio.app successfully!"
 
 # Create DMG disk image using create-dmg or native hdiutil
-echo "Creating macOS DMG installer..."
-DMG_PATH="dist/LKCSExamStudio.dmg"
+DMG_NAME="${1:-LKCSExamStudio}"
+DMG_PATH="dist/${DMG_NAME}.dmg"
+echo "Creating macOS DMG installer at $DMG_PATH..."
 rm -f "$DMG_PATH"
 
 if command -v create-dmg &> /dev/null; then
@@ -52,6 +53,10 @@ if command -v create-dmg &> /dev/null; then
 else
     echo "create-dmg not found, using native macOS hdiutil..."
     hdiutil create -volname "LKCSExamStudio" -srcfolder "dist/LKCSExamStudio.app" -ov -format UDZO "$DMG_PATH"
+fi
+
+if [ "$DMG_PATH" != "dist/LKCSExamStudio.dmg" ]; then
+    cp "$DMG_PATH" "dist/LKCSExamStudio.dmg"
 fi
 
 echo "========================================================"
