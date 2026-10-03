@@ -96,7 +96,7 @@ exe = EXE(
     console=False,   # Windowed desktop application
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch=os.environ.get('TARGET_ARCH', None),
     codesign_identity=None,
     entitlements_file=None,
     icon='app_icon.icns' if sys.platform == 'darwin' else 'app_icon.ico'
