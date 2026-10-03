@@ -1,5 +1,24 @@
 import sys
 import os
+
+# In PyInstaller windowed mode (console=False), sys.stdout and sys.stderr are None.
+# This causes Uvicorn's ColourizedFormatter (sys.stdout.isatty()) to crash with:
+# AttributeError: 'NoneType' object has no attribute 'isatty'
+class SafeStream:
+    def isatty(self):
+        return False
+    def write(self, s):
+        pass
+    def flush(self):
+        pass
+
+if sys.stdout is None:
+    sys.stdout = SafeStream()
+if sys.stderr is None:
+    sys.stderr = SafeStream()
+if sys.stdin is None:
+    sys.stdin = SafeStream()
+
 import threading
 import time
 import socket
@@ -104,6 +123,8 @@ def run_uvicorn_server(host, port):
             port=port,
             log_level="warning",
             access_log=False,
+            use_colors=False,
+            log_config=None,
             lifespan="off"
         )
         server_instance = BackgroundUvicornServer(config)
