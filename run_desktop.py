@@ -11,7 +11,19 @@ import webbrowser
 # Add current folder to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Explicit hidden imports for PyInstaller bundling
+import anyio
+import anyio._backends._asyncio
 import uvicorn
+import uvicorn.loops
+import uvicorn.loops.auto
+import uvicorn.loops.asyncio
+import uvicorn.protocols
+import uvicorn.protocols.http
+import uvicorn.protocols.http.h11_impl
+import uvicorn.lifespan
+import uvicorn.lifespan.on
+
 from app.main import app
 from app.database import init_db
 
@@ -34,6 +46,16 @@ def log_err(msg):
     print(msg, file=sys.stderr)
     logging.error(msg)
 
+def show_error_dialog(title, message):
+    log_err(f"[{title}] {message}")
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, str(message), str(title), 0x10)
+            return
+        except Exception:
+            pass
+
 server_instance = None
 
 def find_available_port(preferred=8000):
@@ -54,29 +76,21 @@ def find_available_port(preferred=8000):
         return s.getsockname()[1]
 
 def run_uvicorn_server(host, port):
-    """Runs Uvicorn in a dedicated background thread with an explicit event loop."""
+    """Runs Uvicorn in a dedicated background thread."""
     global server_instance
     log_msg(f"Initializing Uvicorn on {host}:{port}...")
     try:
-        # Create and assign a dedicated loop for this thread
-        if sys.platform == "win32":
-            loop = asyncio.ProactorEventLoop()
-        else:
-            loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
         config = uvicorn.Config(
             app,
             host=host,
             port=port,
             log_level="warning",
-            loop="asyncio",
             access_log=False
         )
         server_instance = uvicorn.Server(config)
-        log_msg("Uvicorn server starting loop...")
-        loop.run_until_complete(server_instance.serve())
-        log_msg("Uvicorn server exited cleanly.")
+        log_msg("Starting Uvicorn server via server.run()...")
+        server_instance.run()
+        log_msg("Uvicorn server finished.")
     except Exception as e:
         log_err(f"CRITICAL: Uvicorn server crash on {host}:{port}: {e}\n{traceback.format_exc()}")
 
@@ -138,7 +152,12 @@ def main():
     log_msg(f"Waiting for local server to be ready on port {port}...")
     server_ok = wait_for_server_ready(port, timeout=35)
     if not server_ok:
-        log_err(f"[ERROR] Server health check timed out on port {port}.")
+        log_err(f"[CRITICAL ERROR] Server health check timed out on port {port}. Aborting window launch.")
+        show_error_dialog(
+            "LKCS Exam Studio - Startup Error",
+            f"The application backend could not start on port {port}.\n\nPlease check 'lkcs_desktop.log' in the application folder for details."
+        )
+        return
 
     app_url = f"http://127.0.0.1:{port}"
 
