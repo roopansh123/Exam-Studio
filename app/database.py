@@ -66,7 +66,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS school_settings (
         id INTEGER PRIMARY KEY,
         school_name TEXT NOT NULL DEFAULT 'DELHI PUBLIC SCHOOL',
-        school_name_font TEXT DEFAULT 'Old English Text MT',
+        school_name_font TEXT DEFAULT 'Canterbury',
         sub_title TEXT DEFAULT 'Affiliated to CBSE, New Delhi | Affiliation No. 123456',
         address TEXT DEFAULT 'Knowledge Park, Institutional Area, New Delhi - 110001',
         logo_path TEXT DEFAULT '',
@@ -96,14 +96,14 @@ def init_db():
     if cursor.fetchone()['cnt'] == 0:
         cursor.execute('''
         INSERT INTO school_settings (id, school_name, school_name_font, sub_title, address, logo_size, watermark_text, show_watermark, font_family, font_size, line_spacing, page_layout, enable_answer_key, wifi_enabled, wifi_security_mode, network_scope, public_url, admin_username, admin_password)
-        VALUES (1, 'LORD KRISHNA CONVENT SCHOOL', 'Old English Text MT', 'Affiliated to Central Board of Secondary Education (CBSE)', 'Knowledge Campus, New Delhi', 80, 'CONFIDENTIAL - EXAM 2026', 0, 'Calibri', '11pt', '1.15', '1-column', 0, 1, 'secure', 'school_wifi', '', 'admin', 'admin123')
+        VALUES (1, 'LORD KRISHNA CONVENT SCHOOL', 'Canterbury', 'Affiliated to Central Board of Secondary Education (CBSE)', 'Knowledge Campus, New Delhi', 80, 'CONFIDENTIAL - EXAM 2026', 0, 'Calibri', '11pt', '1.15', '1-column', 0, 1, 'secure', 'school_wifi', '', 'admin', 'admin123')
         ''')
 
     # Migration for existing databases that lack new columns
     cursor.execute("PRAGMA table_info(school_settings)")
     existing_cols = [r['name'] for r in cursor.fetchall()]
     if 'school_name_font' not in existing_cols:
-        cursor.execute("ALTER TABLE school_settings ADD COLUMN school_name_font TEXT DEFAULT 'Old English Text MT'")
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN school_name_font TEXT DEFAULT 'Canterbury'")
     if 'logo_size' not in existing_cols:
         cursor.execute("ALTER TABLE school_settings ADD COLUMN logo_size INTEGER DEFAULT 80")
     if 'enable_answer_key' not in existing_cols:
@@ -125,6 +125,7 @@ def init_db():
 
     # If school name is still default placeholder, update to Lord Krishna Convent School
     cursor.execute("UPDATE school_settings SET school_name = 'LORD KRISHNA CONVENT SCHOOL' WHERE id = 1 AND (school_name LIKE '%SPRINGDALE%' OR school_name LIKE '%DELHI PUBLIC SCHOOL%')")
+    cursor.execute("UPDATE school_settings SET school_name_font = 'Canterbury' WHERE id = 1 AND (school_name_font = 'Old English Text MT' OR school_name_font IS NULL)")
 
     # Teachers table
     cursor.execute('''

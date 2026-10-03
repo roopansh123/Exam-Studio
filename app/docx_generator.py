@@ -59,7 +59,7 @@ def generate_docx(blueprint_data: dict, questions: list, school_settings: dict, 
     watermark_text = school_settings.get('watermark_text', '')
     show_watermark = school_settings.get('show_watermark', 0)
 
-    school_name_font = school_settings.get('school_name_font') or "Old English Text MT"
+    school_name_font = school_settings.get('school_name_font') or "Canterbury"
 
     # Header Table
     if logo_path and os.path.exists(logo_path):

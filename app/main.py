@@ -48,7 +48,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # ----------------- Models -----------------
 class SchoolSettingsUpdate(BaseModel):
     school_name: str
-    school_name_font: Optional[str] = "Old English Text MT"
+    school_name_font: Optional[str] = "Canterbury"
     sub_title: Optional[str] = ""
     address: Optional[str] = ""
     logo_size: Optional[int] = 80
@@ -465,7 +465,7 @@ async def update_school_settings(settings: SchoolSettingsUpdate):
         network_scope = ?, public_url = ?
     WHERE id = 1
     ''', (
-        settings.school_name, settings.school_name_font or 'Old English Text MT',
+        settings.school_name, settings.school_name_font or 'Canterbury',
         settings.sub_title, settings.address,
         settings.logo_size or 80,
         settings.watermark_text, 1 if settings.show_watermark else 0,

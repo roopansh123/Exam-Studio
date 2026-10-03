@@ -683,8 +683,19 @@ body {
     font-weight: 600;
 }
 
-.font-old-english {
-    font-family: 'Old English Text MT', 'Engravers Old English BT', 'Cloister Black', 'UnifrakturMaguntia', serif !important;
+/* Embedded Canterbury Font for School Name (Zero Install Required) */
+@font-face {
+    font-family: 'Canterbury';
+    src: url('../fonts/Canterbury.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+.school-title-font,
+.font-old-english,
+#school-name-preview {
+    font-family: 'Canterbury', 'Old English Text MT', 'Engravers Old English BT', 'Cloister Black', 'UnifrakturMaguntia', serif !important;
 }
 
 /* Responsive */

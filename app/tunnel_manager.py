@@ -4,11 +4,10 @@ import time
 import re
 import os
 import shutil
-
 import sys
 
 def get_augmented_env():
-    """Builds an environment dictionary with all possible Node/npx directories included in PATH."""
+    """Builds an environment dictionary with all possible Node/npx/ssh directories included in PATH."""
     env = os.environ.copy()
     current_path = env.get("PATH", "")
     
@@ -34,11 +33,13 @@ def get_augmented_env():
         except Exception:
             pass
 
-    # Windows node paths
+    # Windows paths
     if sys.platform == "win32":
         win_paths = [
-            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs"),
-            os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "nodejs"),
+            os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "OpenSSH"),
+            r"C:\Windows\System32\OpenSSH",
+            os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "nodejs"),
+            os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), "nodejs"),
             os.path.join(os.environ.get("APPDATA", ""), "npm"),
             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "node"),
         ]
@@ -52,6 +53,23 @@ def get_augmented_env():
 
     env["PATH"] = path_sep.join(existing_list)
     return env
+
+def get_ssh_binary(env):
+    bin_name = "ssh.exe" if sys.platform == "win32" else "ssh"
+    found = shutil.which(bin_name, path=env.get("PATH"))
+    if found:
+        return found
+    if sys.platform == "win32":
+        candidates = [
+            os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "OpenSSH", "ssh.exe"),
+            r"C:\Windows\System32\OpenSSH\ssh.exe",
+        ]
+    else:
+        candidates = ["/usr/bin/ssh", "/usr/local/bin/ssh", "/opt/homebrew/bin/ssh"]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
 
 class TunnelManager:
     _instance = None
@@ -69,6 +87,16 @@ class TunnelManager:
             cls._instance = cls()
         return cls._instance
 
+    def _start_process(self, cmd, env):
+        return subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            env=env
+        )
+
     def start_tunnel(self, port=8000, subdomain=None):
         with self._lock:
             if self.process and self.process.poll() is None:
@@ -82,41 +110,82 @@ class TunnelManager:
                         npx_path = candidate
                         break
 
-            if not npx_path:
-                self.status = "error"
-                self.error_message = "Node/npx not found on system path. Please ensure Node.js is installed."
-                return {"status": "error", "message": self.error_message}
+            ssh_bin = get_ssh_binary(env)
 
-            cmd = [npx_path, "--yes", "localtunnel", "--port", str(port)]
-            if subdomain:
-                cmd.extend(["--subdomain", subdomain])
+            # Strategy: If npx is present, use localtunnel.
+            # Otherwise use built-in native SSH reverse tunnel (localhost.run) which requires zero installs!
+            cmd = None
+            if ssh_bin and not npx_path:
+                cmd = [
+                    ssh_bin,
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "UserKnownHostsFile=/dev/null",
+                    "-o", "ServerAliveInterval=30",
+                    "-R", f"80:localhost:{port}",
+                    "nokey@localhost.run"
+                ]
+            elif npx_path:
+                cmd = [npx_path, "--yes", "localtunnel", "--port", str(port)]
+                if subdomain:
+                    cmd.extend(["--subdomain", subdomain])
+            elif ssh_bin:
+                cmd = [
+                    ssh_bin,
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "UserKnownHostsFile=/dev/null",
+                    "-o", "ServerAliveInterval=30",
+                    "-R", f"80:localhost:{port}",
+                    "nokey@localhost.run"
+                ]
+            else:
+                self.status = "error"
+                self.error_message = "No tunneling utility found. Please ensure OpenSSH or Node.js is installed."
+                return {"status": "error", "message": self.error_message}
 
             try:
                 self.status = "starting"
                 self.error_message = None
-                self.process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    bufsize=1,
-                    env=env
-                )
+                self.process = self._start_process(cmd, env)
             except Exception as e:
-                self.status = "error"
-                self.error_message = str(e)
-                return {"status": "error", "message": str(e)}
+                # If npx failed to launch, fallback to ssh
+                if ssh_bin and cmd[0] != ssh_bin:
+                    try:
+                        cmd = [
+                            ssh_bin,
+                            "-o", "StrictHostKeyChecking=no",
+                            "-o", "UserKnownHostsFile=/dev/null",
+                            "-o", "ServerAliveInterval=30",
+                            "-R", f"80:localhost:{port}",
+                            "nokey@localhost.run"
+                        ]
+                        self.process = self._start_process(cmd, env)
+                    except Exception as ex2:
+                        self.status = "error"
+                        self.error_message = str(ex2)
+                        return {"status": "error", "message": str(ex2)}
+                else:
+                    self.status = "error"
+                    self.error_message = str(e)
+                    return {"status": "error", "message": str(e)}
 
         # Reader thread to extract public URL
         def _read_output():
-            url_pattern = re.compile(r"your url is:\s*(https?://[^\s]+)", re.IGNORECASE)
+            url_pattern = re.compile(r"(https?://[a-zA-Z0-9.-]+\.(?:loca\.lt|lhr\.life|localhost\.run)[^\s]*)", re.IGNORECASE)
+            fallback_url_pattern = re.compile(r"your url is:\s*(https?://[^\s]+)", re.IGNORECASE)
+            general_url = re.compile(r"(https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\s]*)")
+
             for line in self.process.stdout:
-                match = url_pattern.search(line)
+                line_str = line.strip()
+                match = url_pattern.search(line_str) or fallback_url_pattern.search(line_str)
+                if not match and ("tunneled with tls termination" in line_str or "your url is" in line_str):
+                    match = general_url.search(line_str)
+
                 if match:
-                    self.tunnel_url = match.group(1).strip()
+                    found_url = match.group(1).rstrip(",;.")
+                    self.tunnel_url = found_url
                     self.status = "running"
                     break
-            
+
             # Keep monitoring
             self.process.wait()
             with self._lock:
@@ -126,11 +195,31 @@ class TunnelManager:
         thread = threading.Thread(target=_read_output, daemon=True)
         thread.start()
 
-        # Wait up to 8 seconds for URL
-        for _ in range(25):
+        # Wait up to 10 seconds for URL
+        for _ in range(30):
             if self.tunnel_url:
                 return {"status": "running", "url": self.tunnel_url}
             if self.process.poll() is not None:
+                # If first attempt failed and we haven't tried ssh yet
+                if ssh_bin and cmd[0] != ssh_bin:
+                    with self._lock:
+                        try:
+                            cmd = [
+                                ssh_bin,
+                                "-o", "StrictHostKeyChecking=no",
+                                "-o", "UserKnownHostsFile=/dev/null",
+                                "-o", "ServerAliveInterval=30",
+                                "-R", f"80:localhost:{port}",
+                                "nokey@localhost.run"
+                            ]
+                            self.process = self._start_process(cmd, env)
+                            thread = threading.Thread(target=_read_output, daemon=True)
+                            thread.start()
+                        except Exception:
+                            pass
+                    time.sleep(1.0)
+                    continue
+
                 stderr = self.process.stderr.read() if self.process.stderr else ""
                 self.status = "error"
                 self.error_message = stderr or "Tunnel process exited unexpectedly."

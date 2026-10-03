@@ -161,11 +161,19 @@
             object-fit: contain;
         }
 
+        @font-face {
+            font-family: 'Canterbury';
+            src: url('/static/fonts/Canterbury.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
         .school-title {
-            font-family: 'Old English Text MT', 'Engravers Old English BT', 'Cloister Black', 'UnifrakturMaguntia', serif;
-            font-size: 26pt;
-            font-weight: 700;
-            letter-spacing: 0.8px;
+            font-family: '{{ school.school_name_font or "Canterbury" }}', 'Canterbury', 'Old English Text MT', 'Engravers Old English BT', 'Cloister Black', 'UnifrakturMaguntia', serif !important;
+            font-size: 28pt;
+            font-weight: normal;
+            letter-spacing: 0.5px;
             color: #0f172a;
             line-height: 1.2;
         }

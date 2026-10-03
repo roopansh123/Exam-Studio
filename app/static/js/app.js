@@ -661,7 +661,7 @@ async function loadSchoolSettings() {
         };
 
         setVal('setting-school-name', data.school_name || 'LORD KRISHNA CONVENT SCHOOL');
-        setVal('setting-school-name-font', data.school_name_font || 'Old English Text MT');
+        setVal('setting-school-name-font', data.school_name_font || 'Canterbury');
         setVal('setting-subtitle', data.sub_title || '');
         setVal('setting-address', data.address || '');
         setVal('setting-watermark', data.watermark_text || '');
@@ -718,11 +718,13 @@ function updateSchoolNamePreview() {
     if (!previewEl) return;
 
     const name = nameInput?.value?.trim() || 'LORD KRISHNA CONVENT SCHOOL';
-    const font = fontSelect?.value || 'Old English Text MT';
+    const font = fontSelect?.value || 'Canterbury';
 
     previewEl.innerText = name;
-    if (font === 'Old English Text MT') {
-        previewEl.style.fontFamily = "'Old English Text MT', 'Engravers Old English BT', 'Cloister Black', 'UnifrakturMaguntia', serif";
+    if (font === 'Canterbury') {
+        previewEl.style.fontFamily = "'Canterbury', 'Old English Text MT', serif";
+    } else if (font === 'Old English Text MT') {
+        previewEl.style.fontFamily = "'Old English Text MT', 'Canterbury', 'Engravers Old English BT', serif";
     } else if (font === 'UnifrakturMaguntia') {
         previewEl.style.fontFamily = "'UnifrakturMaguntia', cursive, serif";
     } else if (font === 'Cinzel') {
@@ -736,7 +738,7 @@ async function handleSettingsSubmit(e) {
     e.preventDefault();
     const payload = {
         school_name: document.getElementById('setting-school-name')?.value?.trim() || 'LORD KRISHNA CONVENT SCHOOL',
-        school_name_font: document.getElementById('setting-school-name-font')?.value || 'Old English Text MT',
+        school_name_font: document.getElementById('setting-school-name-font')?.value || 'Canterbury',
         sub_title: document.getElementById('setting-subtitle')?.value?.trim() || '',
         address: document.getElementById('setting-address')?.value?.trim() || '',
         logo_size: parseInt(document.getElementById('setting-logo-size')?.value) || 80,
