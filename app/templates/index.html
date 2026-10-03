@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LKCS Exam Studio - Lord Krishna Convent School</title>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- KaTeX for crisp LaTeX Math formula rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+
+    <!-- Main Navigation Bar -->
+    <nav class="app-navbar">
+        <div class="brand-wrapper">
+            <div class="brand-icon" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center;">
+                LK
+            </div>
+            <div>
+                <div class="brand-title">LKCS Exam Studio</div>
+                <div class="brand-tagline">Lord Krishna Convent School</div>
+            </div>
+        </div>
+
+        <div class="nav-center">
+            <button class="nav-tab-btn active" data-tab="tab-papers">
+                <span>📚 Question Papers</span>
+            </button>
+            <button class="nav-tab-btn admin-only" data-tab="tab-create">
+                <span>➕ Create Blueprint</span>
+            </button>
+            <button class="nav-tab-btn" data-tab="tab-entry" id="nav-btn-entry" style="display: none;">
+                <span>✏ Teacher Entry</span>
+            </button>
+            <button class="nav-tab-btn admin-only" data-tab="tab-teachers">
+                <span>👥 Teachers</span>
+            </button>
+            <button class="nav-tab-btn admin-only" data-tab="tab-settings">
+                <span>⚙ School & Format</span>
+            </button>
+        </div>
+
+        <div class="nav-right">
+            <!-- Wi-Fi LAN button -->
+            <button class="btn btn-secondary btn-sm" onclick="openLanModal()" title="Share with Teachers on School Wi-Fi">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                <span>School Wi-Fi</span>
+            </button>
+
+            <!-- Role Selector -->
+            <div class="role-badge-box">
+                <button class="role-btn active" id="role-admin-btn" onclick="setRole('admin')">Admin</button>
+                <button class="role-btn" id="role-teacher-btn" onclick="setRole('teacher')">Teacher</button>
+            </div>
+
+            <!-- User Session Controls (Admin or Teacher) -->
+            <div id="user-session-box" style="display: flex; align-items: center; gap: 8px;">
+                <span id="admin-logged-badge" class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                    🛡️ <span id="admin-username-display">admin</span>
+                </span>
+                <span id="teacher-logged-badge" class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 12px; display: none; align-items: center; gap: 4px;">
+                    👨‍🏫 <span id="teacher-name-display">Teacher</span>
+                </span>
+                <button id="user-logout-btn" type="button" class="btn btn-secondary btn-sm" onclick="handleUserLogout()" title="Log out from portal" style="color: #ef4444; border-color: #fca5a5; font-size: 12px; padding: 4px 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-weight: 600;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="app-container">
+
+        <!-- Welcome Banner -->
+        <div class="welcome-banner">
+            <div class="banner-text">
+                <h2>Automated Question Paper Generator & Blueprint Workflow</h2>
+                <p>Admin specifies blueprint rules & questions quota • Teachers input questions with LaTeX math & diagrams • Download instant PDF & DOCX Word papers</p>
+            </div>
+            <div class="lan-info-pill">
+                <span id="user-status-text" style="font-weight: 700; font-size: 13px;">Logged in as Admin</span>
+            </div>
+        </div>
+
+        <!-- TAB 1: QUESTION PAPERS (DASHBOARD) -->
+        <div class="tab-pane active" id="tab-papers">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h3 style="font-size: 18px; font-weight: 800;">Question Papers & Exam Blueprints</h3>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary admin-only" onclick="openBulkBlueprintModal()" style="display: flex; align-items: center; gap: 6px;">
+                        <span>⚡ Bulk Blueprints</span>
+                    </button>
+                    <button class="btn btn-primary admin-only" onclick="switchTab('tab-create')">+ New Blueprint</button>
+                </div>
+            </div>
+            <div class="grid-cards" id="blueprints-grid">
+                <!-- Loaded dynamically -->
+            </div>
+        </div>
+
+        <!-- TAB 2: CREATE BLUEPRINT (ADMIN) -->
+        <div class="tab-pane admin-only" id="tab-create">
+            <div class="form-panel">
+                <div class="form-section-title" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span>📋 Create Question Paper Blueprint (Admin Specification)</span>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openBulkBlueprintModal()">⚡ Switch to Bulk Generator</button>
+                </div>
+                <form id="blueprint-form" onsubmit="handleCreateBlueprint(event)">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">Exam Title / Assessment Name *</label>
+                            <input type="text" id="blueprint-title" class="form-input" required placeholder="e.g. Periodic Assessment - II (2026-27)" value="Half Yearly Examination 2026-27">
+                        </div>
+                        <div class="form-group" style="flex: 1.5;">
+                            <label class="form-label">Assign Teacher *</label>
+                            <select id="blueprint-teacher-id" class="form-select" required>
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Class *</label>
+                            <input type="text" id="blueprint-class" class="form-input" required placeholder="e.g. Class 10" value="Class 10">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Section (Optional)</label>
+                            <input type="text" id="blueprint-section" class="form-input" placeholder="e.g. A or leave blank for all" value="">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Subject *</label>
+                            <input type="text" id="blueprint-subject" class="form-input" required placeholder="e.g. Mathematics" value="Mathematics">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Duration (Mins) *</label>
+                            <input type="number" id="blueprint-duration" class="form-input" required value="180">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Total Marks *</label>
+                            <input type="number" id="blueprint-total-marks" class="form-input" required value="80" oninput="updateBlueprintMarksSummary()">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">General Instructions (Shown at the top of question paper)</label>
+                        <textarea id="blueprint-instructions" class="form-textarea" rows="4">1. All questions are compulsory.
+2. The question paper consists of sections as outlined below.
+3. Use of calculators is strictly prohibited.</textarea>
+                    </div>
+
+                    <div style="margin-top: 24px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                        <h4 style="font-size: 15px; font-weight: 700;">Question Breakdown & Section Blueprints</h4>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addSectionConfigRow()">+ Add Section</button>
+                    </div>
+
+                    <div id="blueprint-sections-container">
+                        <!-- Dynamic Section definitions -->
+                    </div>
+
+                    <!-- Live Marks Validation & Calculation Bar -->
+                    <div id="blueprint-marks-summary-box" style="margin-top: 14px; padding: 12px 18px; border-radius: 8px; background: #f8fafc; border: 1.5px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; gap: 16px; align-items: center;">
+                            <span style="font-size: 13px; font-weight: 700; color: #475569;">Sections Marks Calculation:</span>
+                            <span id="bp-calculated-marks-badge" style="font-size: 14px; font-weight: 800; color: #0f172a; background: #e2e8f0; padding: 2px 10px; border-radius: 6px;">80 Marks</span>
+                            <span style="font-size: 13px; color: #64748b;">(Target Paper Marks: <strong id="bp-target-marks-display">80</strong>)</span>
+                        </div>
+                        <div id="bp-marks-status-badge" style="font-size: 12.5px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                            ✓ Total Marks Match (80 / 80)
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="switchTab('tab-papers')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create Paper Blueprint</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- TAB 3: TEACHER QUESTION ENTRY WORKSPACE -->
+        <div class="tab-pane" id="tab-entry">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                <div>
+                    <h3 style="font-size: 18px; font-weight: 800;" id="workspace-title">Question Entry Workspace</h3>
+                    <p style="font-size: 13px; color: var(--text-muted);">Fill in each required question. You can use LaTeX math formulas like <code>$x^2 + y^2 = r^2$</code> and attach diagrams.</p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-emerald" onclick="submitPaperToAdmin()">
+                        ✓ Submit Paper to Admin
+                    </button>
+                    <button class="btn btn-secondary" onclick="switchTab('tab-papers')">
+                        ← Back to Question Papers
+                    </button>
+                </div>
+            </div>
+
+            <div class="entry-workspace">
+                <!-- Sidebar Question Selector -->
+                <div class="entry-sidebar">
+                    <div class="entry-sidebar-title">Questions in this Blueprint</div>
+                    <div class="q-nav-list" id="q-nav-list">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Main Question Input Form -->
+                <div class="form-panel" style="max-width: 100%; margin: 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);">
+                        <div>
+                            <span style="font-size: 18px; font-weight: 800;" id="q-form-num-display">Question 1</span>
+                            <span class="badge badge-assigned" id="q-form-section-display" style="margin-left: 10px;">Section A</span>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <div style="font-size: 13px; font-weight: 600;">Marks:</div>
+                            <input type="number" id="q-form-marks" class="form-input" style="width: 75px;" step="0.5" value="1.0">
+                            <input type="hidden" id="q-form-type" value="MCQ">
+                        </div>
+                    </div>
+
+                    <form onsubmit="handleQuestionSave(event)">
+                        <!-- Question Text with LaTeX preview -->
+                        <div class="form-group">
+                            <label class="form-label">
+                                Question Text (Supports LaTeX math using <code>$formula$</code> or <code>$$display$$</code>) *
+                            </label>
+                            <textarea id="q-form-text" class="form-textarea" rows="3" required placeholder="Type the question text here..."></textarea>
+                            <div class="math-preview-box" id="q-math-preview">
+                                <span style="color: var(--text-muted); font-style: italic;">LaTeX math preview will appear here...</span>
+                            </div>
+                        </div>
+
+                        <!-- Diagram Image Upload -->
+                        <div class="form-group">
+                            <label class="form-label">Diagram / Figure Attachment (Optional)</label>
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <input type="file" accept="image/*" class="form-input" onchange="uploadQuestionDiagram(this, 'main')" style="max-width: 320px;">
+                                <input type="hidden" id="q-current-img-path">
+                                <div id="q-img-preview-box"></div>
+                            </div>
+                        </div>
+
+                        <!-- MCQ Options (Hidden if not MCQ) -->
+                        <div id="mcq-options-container" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
+                            <div style="font-weight: 700; font-size: 13.5px; margin-bottom: 10px; color: var(--dark-muted);">MCQ Options</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">(a) Option A</label>
+                                    <input type="text" id="mcq-opt-a" class="form-input" placeholder="Option A text">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">(b) Option B</label>
+                                    <input type="text" id="mcq-opt-b" class="form-input" placeholder="Option B text">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">(c) Option C</label>
+                                    <input type="text" id="mcq-opt-c" class="form-input" placeholder="Option C text">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">(d) Option D</label>
+                                    <input type="text" id="mcq-opt-d" class="form-input" placeholder="Option D text">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Optional Internal Choice "OR" Question -->
+                        <div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-color);">
+                            <div style="font-size: 13.5px; font-weight: 700; color: var(--dark-muted); margin-bottom: 8px;">Internal Choice ("OR" Question - Optional)</div>
+                            <div class="form-group">
+                                <textarea id="q-form-or-text" class="form-textarea" rows="2" placeholder="Alternative question if student chooses OR option..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <input type="file" accept="image/*" class="form-input" onchange="uploadQuestionDiagram(this, 'or')" style="max-width: 320px;">
+                                    <input type="hidden" id="or-current-img-path">
+                                    <div id="or-img-preview-box"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                            <button type="submit" class="btn btn-primary">Save & Continue →</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: TEACHERS MANAGEMENT (ADMIN) -->
+        <div class="tab-pane admin-only" id="tab-teachers">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <div>
+                    <h3 style="font-size: 18px; font-weight: 800;">Manage Teachers</h3>
+                    <p style="font-size: 13px; color: var(--text-muted);">Add teachers and assign them to specific Classes, Sections, and Subjects.</p>
+                </div>
+                <button class="btn btn-primary" onclick="openAddTeacherModal()">+ Add New Teacher</button>
+            </div>
+
+            <div style="background: white; border-radius: var(--radius-lg); border: 1px solid var(--border-color); overflow: hidden;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Teacher Name</th>
+                            <th>Email Address</th>
+                            <th>PIN Code</th>
+                            <th>Assigned Classes & Subjects</th>
+                            <th>Assigned Papers</th>
+                            <th>Share Phone Link & Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teachers-tbody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 5: SCHOOL SETTINGS & FORMATTING (ADMIN) -->
+        <div class="tab-pane admin-only" id="tab-settings">
+            <div class="form-panel">
+                <div class="form-section-title">
+                    <span>🏛 School Profile & Custom Paper Formatting</span>
+                </div>
+                <form id="settings-form" onsubmit="handleSettingsSubmit(event)">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">School / Institution Name *</label>
+                            <input type="text" id="setting-school-name" class="form-input" required oninput="updateSchoolNamePreview()">
+                        </div>
+                        <div class="form-group" style="flex: 1.5;">
+                            <label class="form-label">School Name Typography Font *</label>
+                            <select id="setting-school-name-font" class="form-select" onchange="updateSchoolNamePreview()">
+                                <option value="Old English Text MT" selected>Old English Text MT (Gothic / Blackletter - Default)</option>
+                                <option value="UnifrakturMaguntia">UnifrakturMaguntia (Old English Calligraphy)</option>
+                                <option value="Cinzel">Cinzel (Roman / Classical Regal)</option>
+                                <option value="Times New Roman">Times New Roman (Traditional)</option>
+                                <option value="Calibri">Calibri (Standard Clean)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Live Old English Typography Preview -->
+                    <div style="background: #fdfaf6; border: 1px solid #fed7aa; border-radius: var(--radius-md); padding: 12px 18px; margin-bottom: 16px;">
+                        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #b45309; letter-spacing: 0.5px; margin-bottom: 4px;">School Name Live Header Preview (Old English Style)</div>
+                        <div id="school-name-preview" style="font-family: 'Old English Text MT', 'UnifrakturMaguntia', serif; font-size: 26px; font-weight: 700; color: #0f172a; line-height: 1.3;">DELHI PUBLIC SCHOOL</div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">Affiliation / Subtitle</label>
+                            <input type="text" id="setting-subtitle" class="form-input" placeholder="e.g. Affiliated to CBSE, New Delhi">
+                        </div>
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">Campus Address & Contact</label>
+                            <input type="text" id="setting-address" class="form-input">
+                        </div>
+                    </div>
+
+                    <!-- Logo Upload & Logo Size Option -->
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">School Logo (Displays in PDF & DOCX headers)</label>
+                            <div style="display: flex; align-items: center; gap: 16px;">
+                                <input type="file" accept="image/*" class="form-input" onchange="handleLogoUpload(this)" style="max-width: 320px;">
+                                <img id="logo-preview-img" src="" alt="School Logo Preview" style="max-height: 80px; display: none; border-radius: 4px; border: 1px solid var(--border-color); padding: 4px; transition: max-height 0.2s ease;">
+                            </div>
+                        </div>
+                        <div class="form-group" style="flex: 1.5;">
+                            <label class="form-label">
+                                School Logo Size (Height): <span id="logo-size-val" style="font-weight: 800; color: var(--primary);">80px</span>
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="range" id="setting-logo-size" min="40" max="180" step="5" value="80" class="form-input" style="padding: 0; cursor: pointer;" oninput="updateLogoSizePreview(this.value)">
+                            </div>
+                            <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="setLogoSizePreset(50)">Small (50px)</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="setLogoSizePreset(80)">Medium (80px)</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="setLogoSizePreset(110)">Large (110px)</button>
+                                <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="setLogoSizePreset(150)">XL (150px)</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- School Wi-Fi Access Control -->
+                    <div class="form-section-title" style="margin-top: 24px;">
+                        <span>📶 School Wi-Fi & LAN Portal Configuration (Admin Controlled)</span>
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 20px;">
+                        <div class="form-row" style="margin-bottom: 8px;">
+                            <div class="form-group" style="flex: 1.1;">
+                                <label class="form-label">School Wi-Fi / LAN Sharing</label>
+                                <select id="setting-wifi-enabled" class="form-select">
+                                    <option value="1">ON - Wi-Fi Sharing Enabled</option>
+                                    <option value="0">OFF - Wi-Fi Sharing Disabled</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1.1;">
+                                <label class="form-label">Wi-Fi Security Mode</label>
+                                <select id="setting-wifi-mode" class="form-select">
+                                    <option value="secure">🔒 Secure (PIN / Link Required)</option>
+                                    <option value="open">🌐 Not Secure (Open Access)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1.4;">
+                                <label class="form-label">Teacher Network Access Scope *</label>
+                                <select id="setting-network-scope" class="form-select" onchange="toggleNetworkScopeUI()">
+                                    <option value="school_wifi" selected>🏫 School Wi-Fi Only (Local Network Restricted)</option>
+                                    <option value="any_network">🌍 Any Network (Internet / Home / Mobile Data)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Internet Access & Tunnel Controls (Visible when 'any_network' selected) -->
+                        <div id="internet-tunnel-panel" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 14px 16px; margin-top: 12px; margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="font-size: 13px; font-weight: 700; color: #1e40af;">
+                                    🌍 Admin PC as Internet Server (Access on Any Network)
+                                </div>
+                                <div id="tunnel-status-badge" style="font-size: 11.5px; font-weight: 700; padding: 2px 10px; border-radius: 12px; background: #e2e8f0; color: #475569;">
+                                    🔴 Tunnel Offline
+                                </div>
+                            </div>
+                            <p style="font-size: 12px; color: #1e3a8a; margin-bottom: 10px; line-height: 1.4;">
+                                Allows teachers to open the portal from home or on cellular data (4G/5G). Start an instant free internet tunnel below, or enter a custom public domain/IP.
+                            </p>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="setting-public-url" class="form-input" placeholder="e.g. https://xyz.loca.lt or https://portal.myschool.edu" style="font-size: 12px; font-family: 'JetBrains Mono', monospace; flex: 1;">
+                                <button type="button" id="btn-toggle-tunnel" class="btn btn-primary btn-sm" onclick="toggleInternetTunnel()" style="white-space: nowrap;">
+                                    ⚡ Start Internet Tunnel
+                                </button>
+                            </div>
+                        </div>
+
+                        <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
+                            • <strong>School Wi-Fi Only:</strong> Strictly restricts portal access to devices connected to the school router.<br>
+                            • <strong>Any Network:</strong> Turns your Admin PC into an internet-accessible server for home/mobile access.
+                        </p>
+                    </div>
+
+                    <div class="form-section-title" style="margin-top: 28px;">
+                        <span>🎨 Typography, Layout & Styling Options</span>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Font Family (Body Text)</label>
+                            <select id="setting-font-family" class="form-select">
+                                <option value="Calibri">Calibri (Standard)</option>
+                                <option value="Arial">Arial (Clean Sans-Serif)</option>
+                                <option value="Times New Roman">Times New Roman (Classic Formal)</option>
+                                <option value="Segoe UI">Segoe UI</option>
+                                <option value="Georgia">Georgia (Serif)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Base Font Size (Up to 25 pt)</label>
+                            <select id="setting-font-size" class="form-select">
+                                <option value="8pt">8 pt (Ultra Compact)</option>
+                                <option value="9pt">9 pt</option>
+                                <option value="10pt">10 pt (Compact)</option>
+                                <option value="10.5pt">10.5 pt</option>
+                                <option value="11pt">11 pt (Standard)</option>
+                                <option value="11.5pt">11.5 pt</option>
+                                <option value="12pt">12 pt (Large)</option>
+                                <option value="13pt">13 pt</option>
+                                <option value="14pt">14 pt</option>
+                                <option value="15pt">15 pt</option>
+                                <option value="16pt">16 pt</option>
+                                <option value="17pt">17 pt</option>
+                                <option value="18pt">18 pt</option>
+                                <option value="19pt">19 pt</option>
+                                <option value="20pt">20 pt</option>
+                                <option value="21pt">21 pt</option>
+                                <option value="22pt">22 pt</option>
+                                <option value="23pt">23 pt</option>
+                                <option value="24pt">24 pt</option>
+                                <option value="25pt">25 pt (Large Print / Primary)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Line Spacing</label>
+                            <select id="setting-line-spacing" class="form-select">
+                                <option value="1.0">Single (1.0)</option>
+                                <option value="1.15">Standard (1.15)</option>
+                                <option value="1.25">Relaxed (1.25)</option>
+                                <option value="1.5">1.5 Lines</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Page Column Layout</label>
+                            <select id="setting-layout" class="form-select">
+                                <option value="1-column">1 Column (Full Width)</option>
+                                <option value="2-column">2 Columns (Newspaper / Compact Exam style)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">Watermark Text (e.g. CONFIDENTIAL or School Name)</label>
+                            <input type="text" id="setting-watermark" class="form-input" placeholder="e.g. CONFIDENTIAL">
+                        </div>
+                        <div class="form-group" style="flex: 1; justify-content: flex-end;">
+                            <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; cursor: pointer; padding-bottom: 10px;">
+                                <input type="checkbox" id="setting-show-watermark">
+                                Enable Watermark in PDF
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                            <input type="checkbox" id="setting-show-instructions" checked>
+                            Show General Instructions Box in Papers
+                        </label>
+                    </div>
+
+                    <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+                        <button type="submit" class="btn btn-primary">Save All Settings</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Admin Account & Security Settings Panel -->
+            <div class="form-panel" style="margin-top: 24px;">
+                <div class="form-section-title">
+                    <span>🔐 Admin Account & Security Credentials</span>
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                    Change your administrator login username or password. Keep these credentials secure to protect question paper blueprints and teacher portal controls.
+                </p>
+                <form id="admin-password-form" onsubmit="handleAdminChangePassword(event)">
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Current Admin Password *</label>
+                            <input type="password" id="admin-current-pass" class="form-input" required placeholder="Enter current password">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">New Admin Username (Optional)</label>
+                            <input type="text" id="admin-new-user" class="form-input" placeholder="e.g. admin or principal">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">New Admin Password *</label>
+                            <input type="password" id="admin-new-pass" class="form-input" required placeholder="Enter new password (min 4 chars)" minlength="4">
+                        </div>
+                    </div>
+                    <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+                        <button type="submit" class="btn btn-primary" id="btn-update-admin-pass">Update Admin Credentials</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL: ADD / EDIT TEACHER -->
+    <div class="modal-overlay" id="teacher-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="teacher-modal-title">Add New Teacher</div>
+                <button class="modal-close-btn" onclick="closeTeacherModal()">✕</button>
+            </div>
+            <form onsubmit="handleSaveTeacher(event)">
+                <input type="hidden" id="teacher-form-id">
+                <div class="form-group">
+                    <label class="form-label">Teacher Name *</label>
+                    <input type="text" id="teacher-form-name" class="form-input" required placeholder="e.g. Dr. Rajesh Kumar">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email Address *</label>
+                    <input type="email" id="teacher-form-email" class="form-input" required placeholder="rajesh@school.edu">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Login PIN Code *</label>
+                        <input type="text" id="teacher-form-pin" class="form-input" required value="1234" placeholder="e.g. 1234">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Phone Number</label>
+                        <input type="text" id="teacher-form-phone" class="form-input" placeholder="e.g. 9876543210">
+                    </div>
+                </div>
+
+                <div style="margin-top: 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 13.5px; font-weight: 700;">Assigned Classes & Subjects</div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addAssignmentRow()">+ Add</button>
+                </div>
+                <div id="teacher-assignments-list">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeTeacherModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Teacher</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: TEACHER QUICK LOGIN -->
+    <div class="modal-overlay" id="teacher-login-modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <div class="modal-title">Teacher Login</div>
+                <button class="modal-close-btn" onclick="closeTeacherLoginModal()">✕</button>
+            </div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                Enter your teacher email and assigned 4-digit PIN code.
+            </p>
+            <form onsubmit="handleTeacherLogin(event)">
+                <div class="form-group">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" id="login-teacher-email" class="form-input" required placeholder="e.g. sharma@school.edu">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">PIN Code</label>
+                    <input type="password" id="login-teacher-pin" class="form-input" required placeholder="e.g. 1234">
+                </div>
+                <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeTeacherLoginModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: WI-FI / LAN ACCESS SHARE -->
+    <div class="modal-overlay" id="lan-modal">
+        <div class="modal-content" style="max-width: 480px; text-align: center;">
+            <div class="modal-header">
+                <div class="modal-title">School Wi-Fi & LAN Portal</div>
+                <button class="modal-close-btn" onclick="closeLanModal()">✕</button>
+            </div>
+
+            <!-- Admin Wi-Fi Quick Toggle Box (Admin only) -->
+            <div class="admin-only" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 16px; text-align: left;">
+                <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--dark-muted); margin-bottom: 8px;">
+                    ⚙ Admin Network & Wi-Fi Controls
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 13px; font-weight: 600;">Wi-Fi Portal Access:</span>
+                    <button id="modal-wifi-toggle-btn" class="btn btn-emerald btn-sm" onclick="toggleWifiAccess()">
+                        ✓ Wi-Fi Access: ON
+                    </button>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 13px; font-weight: 600;">Security Mode:</span>
+                    <select id="modal-wifi-mode-select" class="form-select" style="max-width: 210px; padding: 4px 8px; font-size: 12px;" onchange="updateWifiModeFromModal()">
+                        <option value="secure">🔒 Secure (PIN / Link Required)</option>
+                        <option value="open">🌐 Not Secure (Open Access)</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 13px; font-weight: 600;">Access Scope:</span>
+                    <select id="modal-network-scope-select" class="form-select" style="max-width: 210px; padding: 4px 8px; font-size: 12px;" onchange="updateNetworkScopeFromModal()">
+                        <option value="school_wifi">🏫 School Wi-Fi Only</option>
+                        <option value="any_network">🌍 Any Network (Internet)</option>
+                    </select>
+                </div>
+                <div id="modal-tunnel-control-box" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 12px; color: #1e40af; font-weight: 600;" id="modal-tunnel-status-text">⚡ Internet Tunnel: Offline</span>
+                    <button type="button" id="modal-tunnel-btn" class="btn btn-primary btn-sm" onclick="toggleInternetTunnel()" style="font-size: 11px; padding: 3px 8px;">Start Tunnel</button>
+                </div>
+            </div>
+
+            <!-- Disabled Warning when Wi-Fi is OFF -->
+            <div id="modal-wifi-disabled-warning" style="display: none; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 14px; margin-bottom: 16px; text-align: left;">
+                <div style="font-weight: 700; color: #dc2626; font-size: 14px; margin-bottom: 4px;">🚫 Wi-Fi Sharing Disabled</div>
+                <div style="font-size: 12.5px; color: #b91c1c;">
+                    School Wi-Fi portal access has been turned OFF by the administrator. Teachers cannot connect over LAN until enabled.
+                </div>
+            </div>
+
+            <!-- Active Sharing Info (shown when Wi-Fi is ON) -->
+            <div id="modal-wifi-active-content">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;" id="modal-share-instructions">
+                    Teachers connected to the school Wi-Fi network can scan this QR code or open the link on their laptop or mobile phone:
+                </p>
+                <div style="margin: 12px auto; display: flex; justify-content: center;">
+                    <img id="modal-qr-img" src="" alt="QR Code" style="width: 170px; height: 170px; border-radius: 8px; border: 1px solid var(--border-color); padding: 6px; background: white;">
+                </div>
+                <div style="background: #f1f5f9; padding: 10px 14px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 600; color: var(--primary); word-break: break-all; margin-bottom: 10px;" id="modal-lan-url">
+                    http://192.168.1.x:8000
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;" id="modal-wifi-mode-badge">
+                    🔒 Secure Mode Active: Teacher PIN login or generated link required.
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" onclick="copyLanUrl()">📋 Copy Link</button>
+                <button class="btn btn-secondary btn-sm" onclick="closeLanModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SHARE PORTAL LINK WITH TEACHER (PHONE ACCESS WITH VALIDITY) -->
+    <div class="modal-overlay" id="share-link-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">📱 Share Phone Portal Link</div>
+                <button class="modal-close-btn" onclick="closeShareLinkModal()">✕</button>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 15px; font-weight: 700; color: var(--dark);" id="share-teacher-name">Dr. Sharma</div>
+                <div style="font-size: 12.5px; color: var(--text-muted);" id="share-teacher-email">sharma@school.edu</div>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px;">
+                <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+                    Assigned Question Papers (<span id="share-assigned-count">0</span>)
+                </div>
+                <div id="share-assigned-papers-list" style="font-size: 13px; display: flex; flex-direction: column; gap: 4px;">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <div class="form-row" style="margin-bottom: 14px;">
+                <div class="form-group" style="flex: 1.2;">
+                    <label class="form-label">Network Access *</label>
+                    <select id="share-network-scope-select" class="form-select">
+                        <option value="school_wifi">🏫 School Wi-Fi Only</option>
+                        <option value="any_network">🌍 Any Network (Internet / 4G/5G)</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Link Validity *</label>
+                    <select id="share-validity-select" class="form-select">
+                        <option value="1">1 Hour</option>
+                        <option value="6">6 Hours</option>
+                        <option value="12">12 Hours</option>
+                        <option value="24" selected>24 Hours (1 Day)</option>
+                        <option value="48">48 Hours (2 Days)</option>
+                        <option value="72">3 Days</option>
+                        <option value="168">7 Days</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 16px;" onclick="handleGenerateTeacherLink()">
+                ⚡ Generate Secure Portal Link & QR Code
+            </button>
+
+            <!-- Generated Link Output Container -->
+            <div id="share-result-container" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: var(--success); margin-bottom: 6px;">
+                    ✓ Portal Link Generated Successfully!
+                </div>
+                
+                <div style="margin: 12px auto; display: flex; justify-content: center;">
+                    <img id="share-qr-img" src="" alt="Teacher Portal QR Code" style="width: 180px; height: 180px; border-radius: 8px; border: 1px solid var(--border-color); padding: 6px; background: white;">
+                </div>
+
+                <div style="font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 10px;">
+                    Teacher can scan this QR code directly with their phone camera!
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Phone Access URL</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="share-url-input" class="form-input" readonly style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+                        <button class="btn btn-secondary btn-sm" onclick="copyShareUrl()">📋 Copy</button>
+                    </div>
+                </div>
+
+                <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-top: 10px;">
+                    ⏱ <strong>Valid until:</strong> <span id="share-expiry-text">-</span><br>
+                    🔒 <strong>Security Rules:</strong> Teacher cannot download papers. Once a paper is submitted, it is locked immediately.
+                </div>
+            </div>
+
+            <div style="margin-top: 18px; display: flex; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeShareLinkModal()">Done / Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: BULK BLUEPRINT CREATOR -->
+    <div class="modal-overlay" id="bulk-blueprint-modal">
+        <div class="modal-content" style="max-width: 820px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <div class="modal-title">⚡ Bulk Question Paper Blueprint Generator</div>
+                <button class="modal-close" onclick="closeBulkBlueprintModal()">&times;</button>
+            </div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                Create standardized examination blueprints in batch across multiple classes, sections, and subjects in 1 click.
+            </p>
+
+            <form id="bulk-blueprint-form" onsubmit="handleBulkCreateBlueprint(event)">
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label class="form-label">Exam Assessment Name *</label>
+                        <input type="text" id="bulk-bp-title" class="form-input" required placeholder="e.g. Periodic Assessment - II (2026-27)" value="Half Yearly Examination 2026-27">
+                    </div>
+                    <div class="form-group" style="flex: 1.5;">
+                        <label class="form-label">Teacher Assignment</label>
+                        <select id="bulk-bp-teacher-id" class="form-select">
+                            <option value="">⚡ Auto-Match by Teacher's Assigned Classes</option>
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label class="form-label" style="margin-bottom: 0;">Select Classes *</label>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkClasses(['Class 6','Class 7','Class 8','Class 9','Class 10'])">Classes 6-10</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkClasses(['Class 9','Class 10','Class 11','Class 12'])">Classes 9-12</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkClasses(['Class 1','Class 2','Class 3','Class 4','Class 5'])">Primary (1-5)</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkClasses([])">Clear</button>
+                        </div>
+                    </div>
+                    <div id="bulk-class-chips" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px;">
+                        <!-- Checkboxes dynamically rendered -->
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1.2;">
+                        <label class="form-label">Sections (Optional, comma-separated)</label>
+                        <input type="text" id="bulk-bp-sections" class="form-input" value="A, B" placeholder="e.g. A, B or leave blank for none" oninput="updateBulkCountPreview()">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label">Duration (Minutes) *</label>
+                        <input type="number" id="bulk-bp-duration" class="form-input" required value="180">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label class="form-label">Total Marks *</label>
+                        <input type="number" id="bulk-bp-total-marks" class="form-input" required value="80" oninput="updateBulkMarksSummary()">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label class="form-label" style="margin-bottom: 0;">Select Subjects *</label>
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkSubjects(['English','Hindi','Mathematics','Science','Social Science'])">Core Subjects</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkSubjects(['Physics','Chemistry','Biology','Mathematics'])">Senior Science</button>
+                            <button type="button" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 6px;" onclick="selectBulkSubjects([])">Clear</button>
+                        </div>
+                    </div>
+                    <div id="bulk-subject-chips" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px;">
+                        <!-- Checkboxes dynamically rendered -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">General Instructions</label>
+                    <textarea id="bulk-bp-instructions" class="form-textarea" rows="3">1. All questions are compulsory.
+2. The question paper consists of sections as outlined below.
+3. Use of calculators is strictly prohibited.</textarea>
+                </div>
+
+                <div style="margin-top: 18px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                    <h4 style="font-size: 14px; font-weight: 700;">Blueprint Section Structure (Applies to all generated papers)</h4>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addBulkSectionConfigRow()">+ Add Section</button>
+                </div>
+
+                <div id="bulk-sections-container">
+                    <!-- Dynamic Bulk Section definitions -->
+                </div>
+
+                <!-- Live Marks Validation & Calculation Bar for Bulk -->
+                <div id="bulk-marks-summary-box" style="margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: #f8fafc; border: 1.5px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; gap: 14px; align-items: center;">
+                        <span style="font-size: 12.5px; font-weight: 700; color: #475569;">Section Breakdown:</span>
+                        <span id="bulk-calculated-marks-badge" style="font-size: 13.5px; font-weight: 800; color: #0f172a; background: #e2e8f0; padding: 2px 8px; border-radius: 6px;">80 Marks</span>
+                        <span style="font-size: 12px; color: #64748b;">(Target: <strong id="bulk-target-marks-display">80</strong>)</span>
+                    </div>
+                    <div id="bulk-marks-status-badge" style="font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                        ✓ Total Marks Match (80 / 80)
+                    </div>
+                </div>
+
+                <!-- Preview Total Papers Badge -->
+                <div style="margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="font-size: 13px; color: #1e40af; font-weight: 600;">
+                        📋 Total Blueprints to Generate:
+                    </div>
+                    <div id="bulk-papers-count-badge" style="font-size: 14px; font-weight: 800; color: #1d4ed8;">
+                        0 Question Papers
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeBulkBlueprintModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btn-submit-bulk-bp">⚡ Generate Bulk Blueprints</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: PAPER SUBMITTED WARNING -->
+    <div class="modal-overlay" id="submitted-warning-modal">
+        <div class="modal-content" style="max-width: 440px; text-align: center;">
+            <div style="font-size: 44px; margin-bottom: 8px;">🔒</div>
+            <div style="font-size: 19px; font-weight: 800; color: #991b1b; margin-bottom: 8px;">
+                Paper Already Submitted
+            </div>
+            <p style="font-size: 13.5px; color: var(--dark-muted); line-height: 1.5; margin-bottom: 16px;">
+                This question paper has already been submitted to the School Administrator and is locked for review.<br><br>
+                <strong>You cannot view or edit the questions at this stage.</strong> If you need to make corrections or additions, please request the Admin to reopen this paper.
+            </p>
+            <div style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; color: #b91c1c; font-weight: 600; margin-bottom: 18px;" id="warning-paper-name">
+                Paper Name
+            </div>
+            <button class="btn btn-primary" onclick="closeSubmittedWarningModal()">I Understand</button>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

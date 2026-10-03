@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ blueprint.title }} - {{ blueprint.class_name }} {{ blueprint.subject }}</title>
+    <!-- Old English Font for School Name & KaTeX for crisp LaTeX Math typesetting -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Cinzel:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"
+            onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]});"></script>
+    <style>
+        :root {
+            --font-family: {{ school.font_family or 'Calibri, "Segoe UI", Arial, sans-serif' }};
+            --font-size: {{ school.font_size or '11pt' }};
+            --line-spacing: {{ school.line_spacing or '1.2' }};
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            font-size: var(--font-size);
+            line-height: var(--line-spacing);
+            color: #0f172a;
+            background: #f1f5f9;
+            padding: 20px 0;
+        }
+
+        /* Top control bar (hidden when printing) */
+        .no-print-bar {
+            position: sticky;
+            top: 10px;
+            z-index: 1000;
+            max-width: 900px;
+            margin: 0 auto 16px auto;
+            background: #ffffff;
+            padding: 12px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .bar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .bar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #cbd5e1;
+        }
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .btn-emerald {
+            background: #059669;
+            color: white;
+        }
+        .btn-emerald:hover {
+            background: #047857;
+        }
+
+        /* Paper Sheet */
+        .paper-sheet {
+            background: #ffffff;
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 16mm 20mm;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            position: relative;
+            border-radius: 2px;
+        }
+
+        {% if school.show_watermark and school.watermark_text %}
+        .watermark {
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-35deg);
+            font-size: 55pt;
+            font-weight: 800;
+            color: rgba(148, 163, 184, 0.15);
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            pointer-events: none;
+            user-select: none;
+            white-space: nowrap;
+            z-index: 0;
+        }
+        {% endif %}
+
+        .paper-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* School Header */
+        .school-header {
+            text-align: center;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        .header-with-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .school-logo {
+            max-width: {{ ((school.logo_size or 80) * 1.5)|round|int }}px;
+            max-height: {{ school.logo_size or 80 }}px;
+            object-fit: contain;
+        }
+
+        .school-title {
+            font-family: 'Old English Text MT', 'Engravers Old English BT', 'Cloister Black', 'UnifrakturMaguntia', serif;
+            font-size: 26pt;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .school-subtitle {
+            font-size: 9.5pt;
+            font-style: italic;
+            color: #334155;
+            margin-top: 2px;
+        }
+
+        .school-address {
+            font-size: 8.5pt;
+            color: #64748b;
+        }
+
+        .exam-heading {
+            font-size: 13pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            text-decoration: underline;
+            margin-top: 6px;
+            margin-bottom: 4px;
+        }
+
+        .answer-key-badge {
+            display: inline-block;
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #f87171;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 9pt;
+            font-weight: 700;
+            margin-left: 8px;
+        }
+
+        /* Details Grid */
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+            margin-bottom: 8px;
+            font-size: 10pt;
+        }
+
+        .details-table td {
+            padding: 4px 6px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .bold-val {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        /* Instructions */
+        .instructions-box {
+            background: #f8fafc;
+            border: 1px dashed #94a3b8;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            font-size: 9.5pt;
+        }
+
+        .instructions-title {
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #1e293b;
+        }
+
+        .instructions-list {
+            margin-left: 18px;
+            color: #334155;
+            font-style: italic;
+        }
+
+        .instructions-list li {
+            margin-bottom: 2px;
+        }
+
+        /* Sections */
+        .section-header {
+            text-align: center;
+            font-weight: 800;
+            font-size: 11pt;
+            text-transform: uppercase;
+            background: #f1f5f9;
+            padding: 4px 10px;
+            margin: 14px 0 10px 0;
+            border-top: 1px solid #0f172a;
+            border-bottom: 1px solid #0f172a;
+            letter-spacing: 0.5px;
+        }
+
+        .section-instruction {
+            text-align: center;
+            font-size: 9pt;
+            font-style: italic;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+
+        /* Layout columns */
+        .questions-container {
+            {% if school.page_layout == '2-column' %}
+            column-count: 2;
+            column-gap: 20px;
+            column-rule: 1px dashed #cbd5e1;
+            {% endif %}
+        }
+
+        .question-card {
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .q-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .q-text-wrapper {
+            flex: 1;
+        }
+
+        .q-num {
+            font-weight: 700;
+            margin-right: 4px;
+            color: #0f172a;
+        }
+
+        .q-text {
+            display: inline;
+        }
+
+        .q-marks {
+            font-weight: 700;
+            color: #475569;
+            white-space: nowrap;
+            padding-left: 8px;
+            font-size: 0.95em;
+        }
+
+        .q-image {
+            margin: 6px 0 6px 18px;
+            max-width: 85%;
+            max-height: 220px;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* MCQ Options */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px 14px;
+            margin: 6px 0 6px 18px;
+            font-size: 1em;
+            line-height: inherit;
+        }
+
+        .option-item {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            font-size: 1em;
+        }
+
+        .opt-label {
+            font-weight: 700;
+            color: #334155;
+            font-size: 1em;
+        }
+
+        .or-divider {
+            text-align: center;
+            font-weight: 700;
+            font-style: italic;
+            font-size: 0.9em;
+            color: #475569;
+            margin: 6px 0;
+        }
+
+        .or-content {
+            margin-left: 18px;
+            padding-left: 8px;
+            border-left: 2px solid #cbd5e1;
+            font-size: 1em;
+        }
+
+        /* Solution & Answer Key Box */
+        .solution-box {
+            margin: 6px 0 4px 18px;
+            padding: 6px 10px;
+            background: #f0fdf4;
+            border-left: 3px solid #10b981;
+            font-size: 0.9em;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .solution-ans {
+            font-weight: 700;
+            color: #065f46;
+        }
+
+        .solution-step {
+            color: #047857;
+            margin-top: 2px;
+            font-size: 0.85em;
+        }
+
+        .end-paper {
+            text-align: center;
+            font-weight: 700;
+            font-size: 9.5pt;
+            color: #64748b;
+            margin-top: 20px;
+            padding-top: 8px;
+            border-top: 1px solid #cbd5e1;
+            page-break-inside: avoid;
+        }
+
+        /* Print Media Styles */
+        @media print {
+            body {
+                background: #ffffff;
+                padding: 0;
+            }
+
+            .no-print-bar {
+                display: none !important;
+            }
+
+            .paper-sheet {
+                width: 100%;
+                min-height: auto;
+                box-shadow: none;
+                padding: 0;
+                margin: 0;
+            }
+
+            @page {
+                size: A4;
+                margin: 15mm 18mm 15mm 18mm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top floating toolbar -->
+    <div class="no-print-bar">
+        <div class="bar-left">
+            <span>📄 {{ blueprint.title }} ({{ blueprint.class_name }} - {{ blueprint.subject }})</span>
+        </div>
+        <div class="bar-actions">
+            <button onclick="window.print()" class="btn btn-primary" title="Print or Save as PDF">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Print / Save PDF
+            </button>
+            <a href="/api/paper/{{ blueprint.id }}/docx" class="btn btn-emerald" title="Download Word DOCX file">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Download DOCX
+            </a>
+            <a href="/" class="btn btn-secondary">← Back to App</a>
+        </div>
+    </div>
+
+    <!-- Printable Paper Sheet -->
+    <div class="paper-sheet">
+        {% if school.show_watermark and school.watermark_text %}
+        <div class="watermark">{{ school.watermark_text }}</div>
+        {% endif %}
+
+        <div class="paper-content">
+            <!-- Header -->
+            <div class="school-header">
+                <div class="header-with-logo">
+                    {% if school.logo_path %}
+                    <img src="/{{ school.logo_path }}" alt="Logo" class="school-logo">
+                    {% endif %}
+                    <div>
+                        <h1 class="school-title">{{ school.school_name }}</h1>
+                        {% if school.sub_title %}
+                        <div class="school-subtitle">{{ school.sub_title }}</div>
+                        {% endif %}
+                        {% if school.address %}
+                        <div class="school-address">{{ school.address }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="exam-heading">
+                    {{ blueprint.title }}
+                </div>
+            </div>
+
+            <!-- Details Table -->
+            <table class="details-table">
+                <tr>
+                    <td><strong>Class:</strong> <span class="bold-val">{{ blueprint.class_name }}{% if blueprint.section %} (Section {{ blueprint.section }}){% endif %}</span></td>
+                    <td><strong>Subject:</strong> <span class="bold-val">{{ blueprint.subject }}</span></td>
+                    <td style="text-align: right;"><strong>Roll No:</strong> _________________</td>
+                </tr>
+                <tr>
+                    <td><strong>Time Allowed:</strong> <span class="bold-val">{{ blueprint.duration_minutes }} Minutes</span></td>
+                    <td><strong>Maximum Marks:</strong> <span class="bold-val">{{ blueprint.total_marks }}</span></td>
+                    <td style="text-align: right;"><strong>Date:</strong> _________________</td>
+                </tr>
+            </table>
+
+            <!-- Instructions -->
+            {% if blueprint.general_instructions and not is_answer_key and school.show_instructions %}
+            <div class="instructions-box">
+                <div class="instructions-title">General Instructions:</div>
+                <div class="instructions-list">
+                    {% for line in instructions_list %}
+                    <div>{{ line }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Questions grouped by Section -->
+            <div class="questions-container">
+                {% for sec_name, sec_questions in sections_map.items() %}
+                <div class="section-header">― {{ sec_name }} ―</div>
+                
+                {% for q in sec_questions %}
+                <div class="question-card">
+                    <div class="q-header">
+                        <div class="q-text-wrapper">
+                            <span class="q-num">Q{{ q.question_number }}.</span>
+                            <span class="q-text">{{ q.question_text }}</span>
+                        </div>
+                        <div class="q-marks">[{{ q.marks }}]</div>
+                    </div>
+
+                    {% if q.image_path %}
+                    <div>
+                        <img src="/{{ q.image_path }}" class="q-image" alt="Diagram">
+                    </div>
+                    {% endif %}
+
+                    {% if q.question_type == 'MCQ' and q.parsed_options %}
+                    <div class="options-grid">
+                        {% for opt in q.parsed_options %}
+                        <div class="option-item">
+                            <span class="opt-label">({{ ['a','b','c','d','e','f'][loop.index0] if loop.index0 < 6 else loop.index }}):</span>
+                            <span>{{ opt }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if q.or_question_text %}
+                    <div class="or-divider">― OR ―</div>
+                    <div class="or-content">
+                        <div class="q-text">{{ q.or_question_text }}</div>
+                        {% if q.or_image_path %}
+                        <img src="/{{ q.or_image_path }}" class="q-image" alt="OR Diagram">
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% endfor %}
+            </div>
+
+            <div class="end-paper">
+                *** END OF QUESTION PAPER ***
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
