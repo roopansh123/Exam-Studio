@@ -18,19 +18,25 @@ if exist "dist\EduPaperPro.exe" (
     del /f /q "dist\EduPaperPro.exe" >nul 2>&1
 )
 
-REM 2. Check for pre-installed venv
+REM 2. Check for working pre-installed venv
 if exist "venv\Scripts\pyinstaller.exe" (
-    echo Using pre-installed environment from venv...
-    echo Compiling LKCSExamStudio.exe with PyInstaller...
-    "venv\Scripts\pyinstaller.exe" --clean --noconfirm LKCSExamStudio.spec
-    goto :check_result
+    "venv\Scripts\python.exe" -c "exit(0)" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo Using pre-installed environment from venv...
+        echo Compiling LKCSExamStudio.exe with PyInstaller...
+        "venv\Scripts\pyinstaller.exe" --clean --noconfirm LKCSExamStudio.spec
+        goto :check_result
+    )
 )
 
 if exist ".venv\Scripts\pyinstaller.exe" (
-    echo Using pre-installed environment from .venv...
-    echo Compiling LKCSExamStudio.exe with PyInstaller...
-    ".venv\Scripts\pyinstaller.exe" --clean --noconfirm LKCSExamStudio.spec
-    goto :check_result
+    ".venv\Scripts\python.exe" -c "exit(0)" >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo Using pre-installed environment from .venv...
+        echo Compiling LKCSExamStudio.exe with PyInstaller...
+        ".venv\Scripts\pyinstaller.exe" --clean --noconfirm LKCSExamStudio.spec
+        goto :check_result
+    )
 )
 
 REM 3. Fallback to system Python if venv is missing
