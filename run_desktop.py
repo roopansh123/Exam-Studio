@@ -7,6 +7,9 @@ import asyncio
 import urllib.request
 import multiprocessing
 import webbrowser
+import contextlib
+import traceback
+import logging
 
 # Add current folder to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,11 +30,13 @@ import uvicorn.lifespan.on
 from app.main import app
 from app.database import init_db
 
-import traceback
-import logging
+# Set up desktop log file in application folder (not %TEMP%)
+if getattr(sys, 'frozen', False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Set up desktop log file
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lkcs_desktop.log")
+LOG_FILE = os.path.join(APP_DIR, "lkcs_desktop.log")
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.INFO,
@@ -46,17 +51,30 @@ def log_err(msg):
     print(msg, file=sys.stderr)
     logging.error(msg)
 
-def show_error_dialog(title, message):
-    log_err(f"[{title}] {message}")
+def show_error_dialog(title, message, error_details=""):
+    full_msg = message
+    if error_details:
+        full_msg += f"\n\nError details:\n{error_details}"
+    log_err(f"[{title}] {full_msg}")
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(0, str(message), str(title), 0x10)
+            ctypes.windll.user32.MessageBoxW(0, str(full_msg), str(title), 0x10)
             return
         except Exception:
             pass
 
+class BackgroundUvicornServer(uvicorn.Server):
+    """Subclass of uvicorn.Server that disables signal handlers so it can run safely in a worker thread."""
+    def install_signal_handlers(self):
+        pass
+
+    @contextlib.contextmanager
+    def capture_signals(self):
+        yield
+
 server_instance = None
+server_error = None
 
 def find_available_port(preferred=8000):
     """Finds an available TCP port starting from preferred, falling back if busy."""
@@ -76,8 +94,8 @@ def find_available_port(preferred=8000):
         return s.getsockname()[1]
 
 def run_uvicorn_server(host, port):
-    """Runs Uvicorn in a dedicated background thread."""
-    global server_instance
+    """Runs Uvicorn server in a dedicated background thread without lifespan or signal conflicts."""
+    global server_instance, server_error
     log_msg(f"Initializing Uvicorn on {host}:{port}...")
     try:
         config = uvicorn.Config(
@@ -85,46 +103,46 @@ def run_uvicorn_server(host, port):
             host=host,
             port=port,
             log_level="warning",
-            access_log=False
+            access_log=False,
+            lifespan="off"
         )
-        server_instance = uvicorn.Server(config)
+        server_instance = BackgroundUvicornServer(config)
         log_msg("Starting Uvicorn server via server.run()...")
         server_instance.run()
         log_msg("Uvicorn server finished.")
-    except Exception as e:
-        log_err(f"CRITICAL: Uvicorn server crash on {host}:{port}: {e}\n{traceback.format_exc()}")
+    except BaseException as e:
+        server_error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        log_err(f"CRITICAL: Uvicorn server crash on {host}:{port}: {server_error}")
 
 def wait_for_server_ready(port, timeout=35):
-    """Actively polls the server with raw socket + proxy-bypass HTTP check until ready."""
+    """Waits for server_instance.started flag or socket connectivity."""
+    global server_instance, server_error
     start_time = time.time()
     url = f"http://127.0.0.1:{port}/"
     proxy_handler = urllib.request.ProxyHandler({})
     opener = urllib.request.build_opener(proxy_handler)
 
     while time.time() - start_time < timeout:
-        # 1. First probe raw TCP socket connection
+        if server_error:
+            log_err(f"Server initialization error detected: {server_error}")
+            return False
+
+        # 1. Check uvicorn started flag directly
+        if server_instance and getattr(server_instance, 'started', False):
+            log_msg(f"Server flag started=True confirmed on port {port}")
+            return True
+
+        # 2. Probe raw TCP socket connection
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(0.5)
                 if s.connect_ex(('127.0.0.1', port)) == 0:
-                    # 2. Port is accepting connections, verify HTTP layer
-                    req = urllib.request.Request(url, headers={'User-Agent': 'LKCS-HealthCheck'})
-                    try:
-                        with opener.open(req, timeout=1.0) as resp:
-                            if resp.status in (200, 302, 307):
-                                log_msg(f"Server confirmed ready on port {port} (HTTP {resp.status})")
-                                return True
-                    except urllib.error.HTTPError as he:
-                        # Any HTTP status response means the web server is alive
-                        log_msg(f"Server confirmed ready on port {port} (HTTP {he.code})")
-                        return True
-                    except Exception:
-                        # Socket is open, wait one tick for full HTTP stack
-                        time.sleep(0.3)
-                        return True
+                    log_msg(f"Socket connection confirmed on port {port}")
+                    return True
         except Exception:
             pass
-        time.sleep(0.25)
+
+        time.sleep(0.15)
     return False
 
 def main():
@@ -152,10 +170,12 @@ def main():
     log_msg(f"Waiting for local server to be ready on port {port}...")
     server_ok = wait_for_server_ready(port, timeout=35)
     if not server_ok:
-        log_err(f"[CRITICAL ERROR] Server health check timed out on port {port}. Aborting window launch.")
+        err_detail = server_error or f"Timeout after 35s waiting for server on port {port}."
+        log_err(f"[CRITICAL ERROR] {err_detail}")
         show_error_dialog(
             "LKCS Exam Studio - Startup Error",
-            f"The application backend could not start on port {port}.\n\nPlease check 'lkcs_desktop.log' in the application folder for details."
+            f"The application backend could not start on port {port}.\n\nPlease check 'lkcs_desktop.log' located at:\n{LOG_FILE}",
+            error_details=err_detail
         )
         return
 
