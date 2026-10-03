@@ -11,15 +11,7 @@ def get_app_data_dir():
         if sys.platform == "darwin":
             base = os.path.expanduser("~/Library/Application Support/LKCSExamStudio")
         elif sys.platform == "win32":
-            exe_dir = os.path.dirname(sys.executable)
-            try:
-                test_file = os.path.join(exe_dir, ".test_write")
-                with open(test_file, "w") as f:
-                    f.write("ok")
-                os.remove(test_file)
-                base = os.path.join(exe_dir, "data")
-            except Exception:
-                base = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "LKCSExamStudio")
+            base = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "LKCSExamStudio")
         else:
             base = os.path.expanduser("~/.lkcs_exam_studio")
     else:

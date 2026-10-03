@@ -47,20 +47,33 @@ import uvicorn.lifespan
 import uvicorn.lifespan.on
 
 from app.main import app
-from app.database import init_db
+from app.database import get_app_data_dir, init_db
 
-# Set up desktop log file in application folder (not %TEMP%)
-if getattr(sys, 'frozen', False):
-    APP_DIR = os.path.dirname(sys.executable)
-else:
-    APP_DIR = os.path.dirname(os.path.abspath(__file__))
-
-LOG_FILE = os.path.join(APP_DIR, "lkcs_desktop.log")
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
-)
+# Set up desktop log file in writable user data folder (e.g. %APPDATA%\LKCSExamStudio on Windows)
+try:
+    LOG_DIR = get_app_data_dir()
+    os.makedirs(LOG_DIR, exist_ok=True)
+    LOG_FILE = os.path.join(LOG_DIR, "lkcs_desktop.log")
+    logging.basicConfig(
+        filename=LOG_FILE,
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s'
+    )
+except Exception:
+    try:
+        import tempfile
+        LOG_FILE = os.path.join(tempfile.gettempdir(), "lkcs_desktop.log")
+        logging.basicConfig(
+            filename=LOG_FILE,
+            level=logging.INFO,
+            format='%(asctime)s [%(levelname)s] %(message)s'
+        )
+    except Exception:
+        LOG_FILE = "console"
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s [%(levelname)s] %(message)s'
+        )
 
 def log_msg(msg):
     print(msg)
