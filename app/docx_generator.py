@@ -149,8 +149,7 @@ def generate_docx(blueprint_data: dict, questions: list, school_settings: dict, 
     details_table.autofit = False
 
     cls_val = blueprint_data.get('class_name', '')
-    sec_val = (blueprint_data.get('section') or '').strip()
-    class_info = f"Class: {cls_val} ({sec_val})" if sec_val else f"Class: {cls_val}"
+    class_info = f"Class: {cls_val}"
     subj_info = f"Subject: {blueprint_data.get('subject', '')}"
     time_info = f"Time Allowed: {blueprint_data.get('duration_minutes', 180)} Mins"
     marks_info = f"Maximum Marks: {blueprint_data.get('total_marks', 80)}"

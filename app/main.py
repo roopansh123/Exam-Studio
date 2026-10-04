@@ -65,6 +65,10 @@ class SchoolSettingsUpdate(BaseModel):
     wifi_passcode: Optional[str] = ""
     network_scope: Optional[str] = "school_wifi"  # 'school_wifi' or 'any_network'
     public_url: Optional[str] = ""
+    subjects: Optional[List[str]] = None
+
+class SubjectAddRequest(BaseModel):
+    name: str
 
 class WifiSettingsUpdate(BaseModel):
     wifi_enabled: bool
@@ -450,36 +454,118 @@ async def get_school_settings():
     cursor.execute("SELECT * FROM school_settings WHERE id = 1")
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else {}
+    if not row:
+        return {}
+    res = dict(row)
+    if 'subjects' in res:
+        try:
+            res['subjects'] = json.loads(res['subjects']) if res['subjects'] else []
+        except Exception:
+            res['subjects'] = []
+    return res
 
 @app.post("/api/school-settings")
 async def update_school_settings(settings: SchoolSettingsUpdate):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('''
-    UPDATE school_settings
-    SET school_name = ?, school_name_font = ?, sub_title = ?, address = ?, logo_size = ?, watermark_text = ?,
-        show_watermark = ?, font_family = ?, font_size = ?, line_spacing = ?,
-        page_layout = ?, show_instructions = ?, enable_answer_key = ?,
-        wifi_enabled = ?, wifi_security_mode = ?, wifi_passcode = ?,
-        network_scope = ?, public_url = ?
-    WHERE id = 1
-    ''', (
-        settings.school_name, settings.school_name_font or 'Canterbury',
-        settings.sub_title, settings.address,
-        settings.logo_size or 80,
-        settings.watermark_text, 1 if settings.show_watermark else 0,
-        settings.font_family, settings.font_size, settings.line_spacing,
-        settings.page_layout, 1 if settings.show_instructions else 0,
-        0,
-        1 if settings.wifi_enabled else 0, settings.wifi_security_mode or 'secure',
-        settings.wifi_passcode or '',
-        settings.network_scope or 'school_wifi',
-        settings.public_url or ''
-    ))
+    
+    # Check if subjects is provided
+    subjects_json = json.dumps(settings.subjects) if settings.subjects is not None else None
+
+    if subjects_json is not None:
+        cursor.execute('''
+        UPDATE school_settings
+        SET school_name = ?, school_name_font = ?, sub_title = ?, address = ?, logo_size = ?, watermark_text = ?,
+            show_watermark = ?, font_family = ?, font_size = ?, line_spacing = ?,
+            page_layout = ?, show_instructions = ?, enable_answer_key = ?,
+            wifi_enabled = ?, wifi_security_mode = ?, wifi_passcode = ?,
+            network_scope = ?, public_url = ?, subjects = ?
+        WHERE id = 1
+        ''', (
+            settings.school_name, settings.school_name_font or 'Canterbury',
+            settings.sub_title, settings.address,
+            settings.logo_size or 80,
+            settings.watermark_text, 1 if settings.show_watermark else 0,
+            settings.font_family, settings.font_size, settings.line_spacing,
+            settings.page_layout, 1 if settings.show_instructions else 0,
+            0,
+            1 if settings.wifi_enabled else 0, settings.wifi_security_mode or 'secure',
+            settings.wifi_passcode or '',
+            settings.network_scope or 'school_wifi',
+            settings.public_url or '',
+            subjects_json
+        ))
+    else:
+        cursor.execute('''
+        UPDATE school_settings
+        SET school_name = ?, school_name_font = ?, sub_title = ?, address = ?, logo_size = ?, watermark_text = ?,
+            show_watermark = ?, font_family = ?, font_size = ?, line_spacing = ?,
+            page_layout = ?, show_instructions = ?, enable_answer_key = ?,
+            wifi_enabled = ?, wifi_security_mode = ?, wifi_passcode = ?,
+            network_scope = ?, public_url = ?
+        WHERE id = 1
+        ''', (
+            settings.school_name, settings.school_name_font or 'Canterbury',
+            settings.sub_title, settings.address,
+            settings.logo_size or 80,
+            settings.watermark_text, 1 if settings.show_watermark else 0,
+            settings.font_family, settings.font_size, settings.line_spacing,
+            settings.page_layout, 1 if settings.show_instructions else 0,
+            0,
+            1 if settings.wifi_enabled else 0, settings.wifi_security_mode or 'secure',
+            settings.wifi_passcode or '',
+            settings.network_scope or 'school_wifi',
+            settings.public_url or ''
+        ))
     conn.commit()
     conn.close()
     return {"status": "success", "message": "Settings updated"}
+
+@app.get("/api/subjects")
+async def get_subjects():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT subjects FROM school_settings WHERE id = 1")
+    row = cursor.fetchone()
+    conn.close()
+    subjects = []
+    if row and row['subjects']:
+        try:
+            subjects = json.loads(row['subjects'])
+        except Exception:
+            subjects = []
+    return {"subjects": subjects}
+
+@app.post("/api/subjects")
+async def add_subject(data: SubjectAddRequest):
+    subj = data.name.strip()
+    if not subj:
+        raise HTTPException(status_code=400, detail="Subject name cannot be empty.")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT subjects FROM school_settings WHERE id = 1")
+    row = cursor.fetchone()
+    subjects = json.loads(row['subjects']) if (row and row['subjects']) else []
+    # Avoid duplicates case-insensitively
+    if not any(s.lower() == subj.lower() for s in subjects):
+        subjects.append(subj)
+        cursor.execute("UPDATE school_settings SET subjects = ? WHERE id = 1", (json.dumps(subjects),))
+        conn.commit()
+    conn.close()
+    return {"status": "success", "subjects": subjects}
+
+@app.delete("/api/subjects/{subject_name}")
+async def delete_subject(subject_name: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT subjects FROM school_settings WHERE id = 1")
+    row = cursor.fetchone()
+    subjects = json.loads(row['subjects']) if (row and row['subjects']) else []
+    subjects = [s for s in subjects if s.lower() != subject_name.lower().strip()]
+    cursor.execute("UPDATE school_settings SET subjects = ? WHERE id = 1", (json.dumps(subjects),))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "subjects": subjects}
 
 @app.post("/api/upload-logo")
 async def upload_logo(file: UploadFile = File(...)):
@@ -720,7 +806,6 @@ async def create_bulk_blueprints(data: BulkBlueprintCreate):
     validate_blueprint_marks(data.sections_config, data.total_marks)
 
     classes = [c.strip() for c in data.classes if c.strip()]
-    sections = [s.strip() for s in data.sections if s.strip()] or [""]
     subjects = [sub.strip() for sub in data.subjects if sub.strip()]
 
     if not classes:
@@ -737,33 +822,32 @@ async def create_bulk_blueprints(data: BulkBlueprintCreate):
     teachers = [dict(t) for t in cursor.fetchall()]
 
     for cls in classes:
-        for sec in sections:
-            for subj in subjects:
-                assigned_tid = data.teacher_id
-                if not assigned_tid:
-                    for t in teachers:
-                        try:
-                            assigned_list = json.loads(t.get('assigned_classes') or '[]')
-                            for a in assigned_list:
-                                if a.get('class') == cls and (not a.get('section') or a.get('section') == sec) and a.get('subject') == subj:
-                                    assigned_tid = t['id']
-                                    break
-                            if assigned_tid:
+        for subj in subjects:
+            assigned_tid = data.teacher_id
+            if not assigned_tid:
+                for t in teachers:
+                    try:
+                        assigned_list = json.loads(t.get('assigned_classes') or '[]')
+                        for a in assigned_list:
+                            if a.get('class') == cls and a.get('subject') == subj:
+                                assigned_tid = t['id']
                                 break
-                        except Exception:
-                            pass
+                        if assigned_tid:
+                            break
+                    except Exception:
+                        pass
 
-                cursor.execute('''
-                INSERT INTO paper_blueprints (
-                    title, class_name, section, subject, teacher_id, duration_minutes, total_marks,
-                    general_instructions, sections_config, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Assigned')
-                ''', (
-                    data.title, cls, sec, subj, assigned_tid,
-                    data.duration_minutes, data.total_marks, data.general_instructions or '',
-                    json.dumps(data.sections_config)
-                ))
-                created_ids.append(cursor.lastrowid)
+            cursor.execute('''
+            INSERT INTO paper_blueprints (
+                title, class_name, section, subject, teacher_id, duration_minutes, total_marks,
+                general_instructions, sections_config, status
+            ) VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, 'Assigned')
+            ''', (
+                data.title, cls, subj, assigned_tid,
+                data.duration_minutes, data.total_marks, data.general_instructions or '',
+                json.dumps(data.sections_config)
+            ))
+            created_ids.append(cursor.lastrowid)
 
     conn.commit()
     conn.close()

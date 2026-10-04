@@ -8,8 +8,13 @@ let activeBlueprint = null;
 let currentQuestionIndex = 0;
 let currentBlueprintQuestions = [];
 let schoolSettings = {};
-let wifiSettings = {};
 let currentShareTeacherId = null;
+let schoolSubjects = [
+    'English', 'Hindi', 'Mathematics', 'Science', 'Social Science',
+    'Physics', 'Chemistry', 'Biology', 'Computer Science', 'Information Technology',
+    'Economics', 'Accountancy', 'Business Studies', 'History', 'Geography',
+    'Political Science', 'Sanskrit', 'Physical Education', 'Psychology', 'Sociology', 'Art & Craft'
+];
 
 // Admin authentication state
 let isAdminLoggedIn = false;
@@ -688,9 +693,148 @@ async function loadSchoolSettings() {
             logoImg.style.display = 'block';
         }
 
+        if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) {
+            schoolSubjects = data.subjects;
+        }
+        renderSchoolSubjects();
+
         updateSchoolNamePreview();
     } catch (e) {
         console.error('Failed to load school settings', e);
+    }
+}
+
+// ----------------- School Subjects & Curriculum Management -----------------
+function renderSchoolSubjects() {
+    const container = document.getElementById('school-subjects-container');
+    const badge = document.getElementById('subjects-count-badge');
+    const datalist = document.getElementById('school-subjects-datalist');
+    if (!container) return;
+
+    if (!schoolSubjects || schoolSubjects.length === 0) {
+        container.innerHTML = `<span style="color: var(--text-muted); font-size: 13px; font-style: italic;">No subjects added. Add your first subject below.</span>`;
+        if (badge) badge.innerText = `0 Subjects`;
+        if (datalist) datalist.innerHTML = '';
+        return;
+    }
+
+    if (badge) badge.innerText = `${schoolSubjects.length} Subject${schoolSubjects.length === 1 ? '' : 's'}`;
+
+    container.innerHTML = schoolSubjects.map(s => `
+        <div class="subject-chip" style="display: inline-flex; align-items: center; gap: 7px; background: #ffffff; border: 1px solid #cbd5e1; padding: 5px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 600; color: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.03); transition: all 0.15s ease;">
+            <span>${escapeHtml(s)}</span>
+            <button type="button" onclick="handleRemoveSubject('${escapeHtml(s)}')" style="background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px; font-weight: 700; line-height: 1; padding: 0 2px; border-radius: 50%;" title="Remove ${escapeHtml(s)}" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#94a3b8'">✕</button>
+        </div>
+    `).join('');
+
+    if (datalist) {
+        datalist.innerHTML = schoolSubjects.map(s => `<option value="${escapeHtml(s)}"></option>`).join('');
+    }
+}
+
+async function handleAddSubject() {
+    const input = document.getElementById('new-subject-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) {
+        showToast('Please enter a subject name', 'warning');
+        return;
+    }
+    if (schoolSubjects.some(s => s.toLowerCase() === name.toLowerCase())) {
+        showToast(`Subject "${name}" already exists`, 'warning');
+        input.value = '';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/subjects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        schoolSubjects = data.subjects || [];
+        renderSchoolSubjects();
+        input.value = '';
+        showToast(`Subject "${name}" added successfully!`, 'success');
+    } catch (e) {
+        schoolSubjects.push(name);
+        renderSchoolSubjects();
+        input.value = '';
+        showToast(`Subject "${name}" added`, 'success');
+    }
+}
+
+async function handleRemoveSubject(name) {
+    if (!confirm(`Are you sure you want to remove subject "${name}" from school settings?`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/subjects/${encodeURIComponent(name)}`, {
+            method: 'DELETE'
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        schoolSubjects = data.subjects || [];
+        renderSchoolSubjects();
+        showToast(`Subject "${name}" removed.`, 'info');
+    } catch (e) {
+        schoolSubjects = schoolSubjects.filter(s => s.toLowerCase() !== name.toLowerCase());
+        renderSchoolSubjects();
+        showToast(`Subject "${name}" removed.`, 'info');
+    }
+}
+
+async function addSubjectPreset(presetList) {
+    let addedCount = 0;
+    presetList.forEach(s => {
+        if (!schoolSubjects.some(curr => curr.toLowerCase() === s.toLowerCase())) {
+            schoolSubjects.push(s);
+            addedCount++;
+        }
+    });
+
+    if (addedCount === 0) {
+        showToast('All subjects in this stream are already added.', 'info');
+        return;
+    }
+
+    try {
+        await fetch('/api/school-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...schoolSettings, subjects: schoolSubjects })
+        });
+        renderSchoolSubjects();
+        showToast(`Added ${addedCount} subjects from preset stream!`, 'success');
+    } catch (e) {
+        renderSchoolSubjects();
+        showToast(`Added ${addedCount} subjects from preset stream!`, 'success');
+    }
+}
+
+async function resetSubjectsToDefault() {
+    if (!confirm('Reset all subjects to the standard CBSE curriculum list?')) return;
+    const defaults = [
+        "English", "Hindi", "Mathematics", "Science", "Social Science",
+        "Physics", "Chemistry", "Biology", "Computer Science", "Information Technology",
+        "Economics", "Accountancy", "Business Studies", "History", "Geography",
+        "Political Science", "Sanskrit", "Physical Education", "Psychology", "Sociology", "Art & Craft"
+    ];
+    schoolSubjects = defaults;
+    try {
+        await fetch('/api/school-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...schoolSettings, subjects: defaults })
+        });
+        renderSchoolSubjects();
+        showToast('Subjects reset to CBSE standard curriculum list.', 'success');
+    } catch (e) {
+        renderSchoolSubjects();
+        showToast('Subjects reset to defaults.', 'success');
     }
 }
 
@@ -754,7 +898,8 @@ async function handleSettingsSubmit(e) {
         wifi_security_mode: document.getElementById('setting-wifi-mode')?.value || 'secure',
         network_scope: document.getElementById('setting-network-scope')?.value || 'school_wifi',
         public_url: document.getElementById('setting-public-url')?.value?.trim() || '',
-        wifi_passcode: ''
+        wifi_passcode: '',
+        subjects: schoolSubjects
     };
 
     try {
@@ -820,7 +965,7 @@ function renderTeachersTable() {
 
     tbody.innerHTML = teachersList.map(t => {
         const assignmentsHtml = (t.assigned_classes || []).map(a => 
-            `<span class="badge badge-assigned" style="margin: 2px;">${a.class || ''}${a.section ? ' (' + a.section + ')' : ''} - ${a.subject || ''}</span>`
+            `<span class="badge badge-assigned" style="margin: 2px;">${a.class || ''} - ${a.subject || ''}</span>`
         ).join('');
 
         // Find papers assigned to this teacher
@@ -829,7 +974,7 @@ function renderTeachersTable() {
         const papersHtml = assignedBps.length > 0
             ? assignedBps.map(b => `
                 <div style="font-size: 11.5px; margin: 2px 0;">
-                    📄 <strong>${b.class_name}${b.section ? ' (' + b.section + ')' : ''}</strong> ${b.subject}
+                    📄 <strong>${b.class_name}</strong> ${b.subject}
                     <span class="badge ${b.status === 'Questions_Submitted' ? 'badge-submitted' : 'badge-assigned'}" style="font-size: 10px; padding: 1px 5px;">${b.status === 'Questions_Submitted' ? 'Submitted' : 'Assigned'}</span>
                 </div>
               `).join('')
@@ -882,7 +1027,7 @@ function openShareLinkModal(teacherId) {
         listEl.innerHTML = teacherBlueprints.map((b, i) => `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: white; border-radius: 6px; border: 1px solid var(--border-color);">
                 <div>
-                    <strong>${b.class_name}${b.section ? ' (' + b.section + ')' : ''}</strong> - ${b.subject}: <em>${b.title}</em>
+                    <strong>${b.class_name}</strong> - ${b.subject}: <em>${b.title}</em>
                 </div>
                 <span class="badge ${b.status === 'Questions_Submitted' ? 'badge-submitted' : 'badge-assigned'}">${b.status || 'Assigned'}</span>
             </div>
@@ -992,20 +1137,17 @@ function closeTeacherModal() {
     document.getElementById('teacher-modal').classList.remove('active');
 }
 
-function addAssignmentRow(cls = 'Class 10', sec = 'A', subj = 'Mathematics') {
+function addAssignmentRow(cls = 'Class 10', subj = 'Mathematics') {
     const container = document.getElementById('teacher-assignments-list');
     const div = document.createElement('div');
     div.className = 'form-row assignment-row';
     div.style.marginBottom = '8px';
     div.innerHTML = `
-        <div style="flex: 1;">
-            <input type="text" class="form-input assign-class" placeholder="Class (e.g. Class 10)" value="${cls}">
-        </div>
-        <div style="flex: 1;">
-            <input type="text" class="form-input assign-section" placeholder="Section (e.g. A)" value="${sec}">
+        <div style="flex: 1.2;">
+            <input type="text" class="form-input assign-class" placeholder="Class (e.g. Class 10)" value="${escapeHtml(cls)}">
         </div>
         <div style="flex: 1.5;">
-            <input type="text" class="form-input assign-subject" placeholder="Subject (e.g. Science)" value="${subj}">
+            <input type="text" class="form-input assign-subject" list="school-subjects-datalist" placeholder="Subject (e.g. Science)" value="${escapeHtml(subj)}">
         </div>
         <div>
             <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.parentElement.remove()">✕</button>
@@ -1026,7 +1168,7 @@ function editTeacher(id) {
     const container = document.getElementById('teacher-assignments-list');
     container.innerHTML = '';
     if (t.assigned_classes && t.assigned_classes.length > 0) {
-        t.assigned_classes.forEach(a => addAssignmentRow(a.class, a.section, a.subject));
+        t.assigned_classes.forEach(a => addAssignmentRow(a.class, a.subject));
     } else {
         addAssignmentRow();
     }
@@ -1046,11 +1188,10 @@ async function handleSaveTeacher(e) {
     const assignmentRows = document.querySelectorAll('.assignment-row');
     const assignments = [];
     assignmentRows.forEach(row => {
-        const c = row.querySelector('.assign-class').value.trim();
-        const s = row.querySelector('.assign-section').value.trim();
-        const sub = row.querySelector('.assign-subject').value.trim();
+        const c = row.querySelector('.assign-class')?.value?.trim();
+        const sub = row.querySelector('.assign-subject')?.value?.trim();
         if (c && sub) {
-            assignments.push({ class: c, section: s || 'A', subject: sub });
+            assignments.push({ class: c, subject: sub });
         }
     });
 
@@ -1190,7 +1331,7 @@ function renderBlueprintsList() {
                 <div class="card-header">
                     <div>
                         <div class="card-title">${bp.title}</div>
-                        <div class="card-subtitle">${bp.class_name}${bp.section ? ' (' + bp.section + ')' : ''} • ${bp.subject}</div>
+                        <div class="card-subtitle">${bp.class_name} • ${bp.subject}</div>
                     </div>
                     ${statusBadge}
                 </div>
@@ -1377,7 +1518,6 @@ async function handleCreateBlueprint(e) {
     }
     const title = document.getElementById('blueprint-title').value.trim();
     const className = document.getElementById('blueprint-class').value.trim();
-    const section = (document.getElementById('blueprint-section')?.value || '').trim();
     const subject = document.getElementById('blueprint-subject').value.trim();
     const teacherId = document.getElementById('blueprint-teacher-id').value;
     const duration = parseInt(document.getElementById('blueprint-duration').value) || 180;
@@ -1415,7 +1555,7 @@ async function handleCreateBlueprint(e) {
     const payload = {
         title,
         class_name: className,
-        section,
+        section: '',
         subject,
         teacher_id: teacherId ? parseInt(teacherId) : null,
         duration_minutes: duration,
@@ -1741,11 +1881,12 @@ function openBulkBlueprintModal() {
 
     // Populate subjects
     const subjectContainer = document.getElementById('bulk-subject-chips');
+    const availableSubjects = (schoolSubjects && schoolSubjects.length > 0) ? schoolSubjects : ALL_BULK_SUBJECTS;
     if (subjectContainer) {
-        subjectContainer.innerHTML = ALL_BULK_SUBJECTS.map((subj, i) => `
+        subjectContainer.innerHTML = availableSubjects.map((subj, i) => `
             <label style="display: flex; align-items: center; gap: 5px; font-size: 12.5px; background: white; padding: 4px 10px; border-radius: 20px; border: 1px solid #cbd5e1; cursor: pointer;">
-                <input type="checkbox" class="bulk-subject-chk" value="${subj}" ${i === 2 ? 'checked' : ''} onchange="updateBulkCountPreview()">
-                <span>${subj}</span>
+                <input type="checkbox" class="bulk-subject-chk" value="${escapeHtml(subj)}" ${i === 2 ? 'checked' : ''} onchange="updateBulkCountPreview()">
+                <span>${escapeHtml(subj)}</span>
             </label>
         `).join('');
     }
@@ -1789,17 +1930,13 @@ function selectBulkSubjects(list) {
 function updateBulkCountPreview() {
     const checkedClasses = Array.from(document.querySelectorAll('.bulk-class-chk:checked')).map(c => c.value);
     const checkedSubjects = Array.from(document.querySelectorAll('.bulk-subject-chk:checked')).map(s => s.value);
-    const sectionsRaw = document.getElementById('bulk-bp-sections')?.value || '';
-    const sections = sectionsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    const secCount = sections.length > 0 ? sections.length : 1;
-    const secLabel = sections.length > 0 ? `${sections.length} Secs` : 'No Sec';
 
-    const total = checkedClasses.length * secCount * checkedSubjects.length;
+    const total = checkedClasses.length * checkedSubjects.length;
     const badge = document.getElementById('bulk-papers-count-badge');
     const submitBtn = document.getElementById('btn-submit-bulk-bp');
     
     if (badge) {
-        badge.textContent = `${total} Question Paper${total === 1 ? '' : 's'} (${checkedClasses.length} Classes × ${secLabel} × ${checkedSubjects.length} Subjs)`;
+        badge.textContent = `${total} Question Paper${total === 1 ? '' : 's'} (${checkedClasses.length} Classes × ${checkedSubjects.length} Subjs)`;
     }
     if (submitBtn) {
         submitBtn.innerHTML = `⚡ Generate ${total} Blueprints`;
@@ -1931,8 +2068,6 @@ async function handleBulkCreateBlueprint(e) {
     const title = document.getElementById('bulk-bp-title').value.trim();
     const checkedClasses = Array.from(document.querySelectorAll('.bulk-class-chk:checked')).map(c => c.value);
     const checkedSubjects = Array.from(document.querySelectorAll('.bulk-subject-chk:checked')).map(s => s.value);
-    const sectionsRaw = document.getElementById('bulk-bp-sections')?.value || '';
-    const sections = sectionsRaw.split(',').map(s => s.trim()).filter(Boolean);
     const teacherId = document.getElementById('bulk-bp-teacher-id').value;
     const duration = parseInt(document.getElementById('bulk-bp-duration').value) || 180;
     const totalMarks = parseFloat(document.getElementById('bulk-bp-total-marks').value) || 80;
@@ -1978,7 +2113,7 @@ async function handleBulkCreateBlueprint(e) {
     const payload = {
         title,
         classes: checkedClasses,
-        sections: sections.length > 0 ? sections : [""],
+        sections: [""],
         subjects: checkedSubjects,
         teacher_id: teacherId ? parseInt(teacherId) : null,
         duration_minutes: duration,

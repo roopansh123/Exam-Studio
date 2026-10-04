@@ -123,9 +123,27 @@ def init_db():
     if 'admin_password' not in existing_cols:
         cursor.execute("ALTER TABLE school_settings ADD COLUMN admin_password TEXT DEFAULT 'admin123'")
 
+    DEFAULT_SUBJECTS = json.dumps([
+        "English", "Hindi", "Mathematics", "Science", "Social Science",
+        "Physics", "Chemistry", "Biology", "Computer Science", "Information Technology",
+        "Economics", "Accountancy", "Business Studies", "History", "Geography",
+        "Political Science", "Sanskrit", "Physical Education", "Psychology", "Sociology", "Art & Craft"
+    ])
+    if 'subjects' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN subjects TEXT DEFAULT '[]'")
+        cursor.execute("UPDATE school_settings SET subjects = ? WHERE id = 1", (DEFAULT_SUBJECTS,))
+    else:
+        cursor.execute("SELECT subjects FROM school_settings WHERE id = 1")
+        row = cursor.fetchone()
+        if not row or not row['subjects'] or row['subjects'] == '[]':
+            cursor.execute("UPDATE school_settings SET subjects = ? WHERE id = 1", (DEFAULT_SUBJECTS,))
+
     # If school name is still default placeholder, update to Lord Krishna Convent School
     cursor.execute("UPDATE school_settings SET school_name = 'LORD KRISHNA CONVENT SCHOOL' WHERE id = 1 AND (school_name LIKE '%SPRINGDALE%' OR school_name LIKE '%DELHI PUBLIC SCHOOL%')")
     cursor.execute("UPDATE school_settings SET school_name_font = 'Canterbury' WHERE id = 1 AND (school_name_font = 'Old English Text MT' OR school_name_font IS NULL)")
+
+    # Migration: Remove class section from existing blueprints
+    cursor.execute("UPDATE paper_blueprints SET section = '' WHERE section IS NOT NULL AND section != ''")
 
     # Teachers table
     cursor.execute('''
@@ -135,18 +153,39 @@ def init_db():
         email TEXT UNIQUE NOT NULL,
         pin TEXT NOT NULL DEFAULT '1234',
         phone TEXT DEFAULT '',
-        assigned_classes TEXT DEFAULT '[]', -- JSON list of class-section-subject e.g. [{"class": "Class 10", "section": "A", "subject": "Mathematics"}]
+        assigned_classes TEXT DEFAULT '[]', -- JSON list of class-subject e.g. [{"class": "Class 10", "subject": "Mathematics"}]
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+
+    # Migration: Remove class section from existing teachers' assigned_classes
+    try:
+        cursor.execute("SELECT id, assigned_classes FROM teachers")
+        t_rows = cursor.fetchall()
+        for t in t_rows:
+            raw_assigned = t['assigned_classes'] or '[]'
+            assigned_data = json.loads(raw_assigned)
+            needs_update = False
+            cleaned_data = []
+            for item in assigned_data:
+                if 'section' in item:
+                    needs_update = True
+                cleaned_data.append({
+                    "class": item.get("class", ""),
+                    "subject": item.get("subject", "")
+                })
+            if needs_update:
+                cursor.execute("UPDATE teachers SET assigned_classes = ? WHERE id = ?", (json.dumps(cleaned_data), t['id']))
+    except Exception:
+        pass
 
     # Seed an initial teacher if none exists
     cursor.execute('SELECT COUNT(*) as cnt FROM teachers')
     if cursor.fetchone()['cnt'] == 0:
         sample_assignments = json.dumps([
-            {"class": "Class 10", "section": "A", "subject": "Mathematics"},
-            {"class": "Class 10", "section": "B", "subject": "Science"},
-            {"class": "Class 12", "section": "A", "subject": "Physics"}
+            {"class": "Class 10", "subject": "Mathematics"},
+            {"class": "Class 10", "subject": "Science"},
+            {"class": "Class 12", "subject": "Physics"}
         ])
         cursor.execute('''
         INSERT INTO teachers (name, email, pin, phone, assigned_classes)
@@ -159,7 +198,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,                         -- e.g. "Half Yearly Examination 2026-27"
         class_name TEXT NOT NULL,                    -- e.g. "Class 10"
-        section TEXT NOT NULL,                       -- e.g. "A"
+        section TEXT DEFAULT '',                     -- Kept for schema compatibility, always empty
         subject TEXT NOT NULL,                       -- e.g. "Mathematics"
         teacher_id INTEGER,                          -- Assigned teacher ID
         duration_minutes INTEGER DEFAULT 180,        -- Duration in minutes
@@ -260,7 +299,7 @@ def init_db():
 
         cursor.execute('''
         INSERT INTO paper_blueprints (title, class_name, section, subject, teacher_id, duration_minutes, total_marks, general_instructions, sections_config, status)
-        VALUES ('Mid-Term Summative Assessment (2026-27)', 'Class 10', 'A', 'Mathematics', 1, 180, 22, ?, ?, 'Questions_Submitted')
+        VALUES ('Mid-Term Summative Assessment (2026-27)', 'Class 10', '', 'Mathematics', 1, 180, 22, ?, ?, 'Questions_Submitted')
         ''', (default_instructions, sample_sections))
         
         bp_id = cursor.lastrowid
