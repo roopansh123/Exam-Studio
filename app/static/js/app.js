@@ -1312,8 +1312,8 @@ function renderBlueprintsList() {
                 <button class="btn btn-secondary btn-sm" onclick="cloneBlueprint(${bp.id})" title="Duplicate this blueprint for another class or section">
                     📋 Copy
                 </button>
-                <button class="btn btn-secondary btn-sm" onclick="openTeacherWorkspace(${bp.id})">
-                    ✏ ${isSubmitted ? 'View Questions' : 'Enter Questions'}
+                <button class="btn btn-secondary btn-sm" onclick="openTeacherWorkspace(${bp.id})" title="Edit or update questions in this paper">
+                    ✏ ${isSubmitted ? 'Edit Questions' : 'Enter Questions'}
                 </button>
                 ${isSubmitted ? `
                 <button class="btn btn-reopen btn-sm" onclick="reopenBlueprint(${bp.id})" title="Unlock this paper so the teacher can edit again">
@@ -1626,7 +1626,36 @@ async function openTeacherWorkspace(bpId) {
 
 function setupTeacherWorkspace() {
     if (!activeBlueprint) return;
-    document.getElementById('workspace-title').innerText = `${activeBlueprint.title} (${activeBlueprint.class_name} - ${activeBlueprint.subject})`;
+    const isSubmitted = activeBlueprint.status === 'Questions_Submitted' || activeBlueprint.status === 'Approved';
+    const statusNote = (currentRole === 'admin' && isSubmitted) 
+        ? `<span class="badge badge-submitted" style="font-size: 11px; vertical-align: middle; margin-left: 8px;">Submitted - Admin Edit Mode</span>`
+        : '';
+    document.getElementById('workspace-title').innerHTML = `${escapeHtml(activeBlueprint.title)} (${escapeHtml(activeBlueprint.class_name)} - ${escapeHtml(activeBlueprint.subject)}) ${statusNote}`;
+    
+    // Configure header action buttons
+    const submitBtn = document.getElementById('btn-submit-paper-admin');
+    if (submitBtn) {
+        if (currentRole === 'admin') {
+            if (activeBlueprint.status === 'Questions_Submitted') {
+                submitBtn.style.display = 'inline-flex';
+                submitBtn.className = 'btn btn-emerald';
+                submitBtn.innerHTML = '✓ Approve Paper';
+                submitBtn.onclick = approvePaperByAdmin;
+            } else if (activeBlueprint.status === 'Approved') {
+                submitBtn.style.display = 'inline-flex';
+                submitBtn.className = 'btn btn-secondary';
+                submitBtn.innerHTML = '✓ Approved & Finalized';
+                submitBtn.onclick = null;
+            } else {
+                submitBtn.style.display = 'none';
+            }
+        } else {
+            submitBtn.style.display = 'inline-flex';
+            submitBtn.className = 'btn btn-emerald';
+            submitBtn.innerHTML = '✓ Submit Paper to Admin';
+            submitBtn.onclick = submitPaperToAdmin;
+        }
+    }
     
     // Build list of slots based on sections_config
     const slots = [];
@@ -1768,7 +1797,7 @@ async function handleQuestionSave(e) {
     };
 
     try {
-        const res = await fetch(`/api/blueprints/${activeBlueprint.id}/questions`, {
+        const res = await fetch(`/api/blueprints/${activeBlueprint.id}/questions?role=${encodeURIComponent(currentRole)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -1845,6 +1874,25 @@ async function submitPaperToAdmin() {
         showPaperSubmittedWarning(submittedTitle);
     } catch (e) {
         alert('Error submitting paper');
+    }
+}
+
+async function approvePaperByAdmin() {
+    if (!activeBlueprint) return;
+    if (!confirm('Approve and finalize this question paper?')) return;
+    const formData = new FormData();
+    formData.append('status', 'Approved');
+    try {
+        await fetch(`/api/blueprints/${activeBlueprint.id}/status`, {
+            method: 'PUT',
+            body: formData
+        });
+        activeBlueprint.status = 'Approved';
+        showToast('Paper marked as Approved & Finalized!', 'success');
+        setupTeacherWorkspace();
+        await loadBlueprints();
+    } catch (e) {
+        alert('Error approving paper');
     }
 }
 

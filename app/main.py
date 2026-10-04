@@ -935,16 +935,17 @@ async def upload_diagram(file: UploadFile = File(...)):
     return {"status": "success", "image_path": rel_path}
 
 @app.post("/api/blueprints/{bp_id}/questions")
-async def add_or_update_question(bp_id: int, q: QuestionItem):
+async def add_or_update_question(bp_id: int, q: QuestionItem, role: Optional[str] = "admin"):
     conn = get_db()
     cursor = conn.cursor()
     
-    # Check if blueprint is already submitted
-    cursor.execute("SELECT status FROM paper_blueprints WHERE id = ?", (bp_id,))
-    bp_row = cursor.fetchone()
-    if bp_row and bp_row['status'] in ('Questions_Submitted', 'Approved'):
-        conn.close()
-        raise HTTPException(status_code=403, detail="Paper is already submitted to the Admin and questions cannot be modified.")
+    # If role is teacher and paper is already submitted, block modifications. Admin is always allowed to edit!
+    if role == 'teacher':
+        cursor.execute("SELECT status FROM paper_blueprints WHERE id = ?", (bp_id,))
+        bp_row = cursor.fetchone()
+        if bp_row and bp_row['status'] in ('Questions_Submitted', 'Approved'):
+            conn.close()
+            raise HTTPException(status_code=403, detail="Paper is already submitted to the Admin and questions cannot be modified by teachers.")
 
     # Check if question number already exists in this blueprint
     cursor.execute("SELECT id FROM questions WHERE blueprint_id = ? AND question_number = ?", (bp_id, q.question_number))
