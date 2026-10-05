@@ -94,6 +94,9 @@
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
                 <h3 style="font-size: 18px; font-weight: 800;">Question Papers & Exam Blueprints</h3>
                 <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary admin-only" onclick="runAutoAssignAll()" title="Auto-match and assign unassigned papers to teachers based on classes & subjects" style="display: flex; align-items: center; gap: 6px;">
+                        <span>⚡ Auto-Assign Teachers</span>
+                    </button>
                     <button class="btn btn-secondary admin-only" onclick="openBulkBlueprintModal()" style="display: flex; align-items: center; gap: 6px;">
                         <span>⚡ Bulk Blueprints</span>
                     </button>
@@ -119,8 +122,8 @@
                             <input type="text" id="blueprint-title" class="form-input" required placeholder="e.g. Periodic Assessment - II (2026-27)" value="Half Yearly Examination 2026-27">
                         </div>
                         <div class="form-group" style="flex: 1.5;">
-                            <label class="form-label">Assign Teacher *</label>
-                            <select id="blueprint-teacher-id" class="form-select" required>
+                            <label class="form-label">Assign Teacher</label>
+                            <select id="blueprint-teacher-id" class="form-select">
                                 <!-- Populated dynamically -->
                             </select>
                         </div>
@@ -298,7 +301,12 @@
                     <h3 style="font-size: 18px; font-weight: 800;">Manage Teachers</h3>
                     <p style="font-size: 13px; color: var(--text-muted);">Add teachers and assign them to specific Classes and Subjects.</p>
                 </div>
-                <button class="btn btn-primary" onclick="openAddTeacherModal()">+ Add New Teacher</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="runAutoAssignAll()" title="Auto-match and assign all unassigned question papers to teachers based on classes & subjects" style="display: flex; align-items: center; gap: 6px;">
+                        <span>⚡ Auto-Assign All Papers</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="openAddTeacherModal()">+ Add New Teacher</button>
+                </div>
             </div>
 
             <div style="background: white; border-radius: var(--radius-lg); border: 1px solid var(--border-color); overflow: hidden;">
@@ -955,9 +963,54 @@
         </div>
     </div>
 
+    <!-- MODAL: ASSIGN PAPERS TO TEACHER -->
+    <div class="modal-overlay" id="assign-papers-modal">
+        <div class="modal-content" style="max-width: 650px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h3 style="font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                    <span>📑 Assign Papers to</span>
+                    <span id="assign-modal-teacher-name" style="color: var(--primary);">Teacher</span>
+                </h3>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeAssignPapersModal()">✕</button>
+            </div>
+
+            <div style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px;">
+                Assigned Classes & Subjects for this Teacher:
+            </div>
+            <div id="assign-modal-teacher-classes" style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px;">
+                <!-- Teacher badges loaded dynamically -->
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 200px;">
+                    <input type="text" id="assign-paper-search" class="form-input form-input-sm" placeholder="🔍 Search papers by class, subject, title..." oninput="filterAssignPapersList()">
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="autoCheckTeacherMatchingPapers()" title="Automatically select all papers matching this teacher's assigned classes & subjects">⚡ Select Matching</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllAssignPapers(true)">All</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSelectAllAssignPapers(false)">None</button>
+                </div>
+            </div>
+
+            <div id="assign-papers-list-container" style="max-height: 340px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; background: #f8fafc;">
+                <!-- Loaded dynamically -->
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+                <div id="assign-papers-selected-count" style="font-size: 13px; font-weight: 700; color: var(--primary);">
+                    0 papers selected
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAssignPapersModal()">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btn-save-assign-papers" onclick="saveTeacherPaperAssignments()">Save Assigned Papers</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Datalist for active school subjects -->
     <datalist id="school-subjects-datalist"></datalist>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=2.2"></script>
 </body>
 </html>

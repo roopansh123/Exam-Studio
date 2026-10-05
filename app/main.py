@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import shutil
 import secrets
@@ -124,6 +125,12 @@ class BulkBlueprintCreate(BaseModel):
     total_marks: float = 80.0
     general_instructions: Optional[str] = ""
     sections_config: list
+
+class AssignTeacherRequest(BaseModel):
+    teacher_id: Optional[int] = None
+
+class TeacherPapersUpdate(BaseModel):
+    blueprint_ids: list[int]
 
 def validate_blueprint_marks(sections_config: list, total_marks: float):
     """
@@ -583,6 +590,191 @@ async def upload_logo(file: UploadFile = File(...)):
     conn.close()
     return {"status": "success", "logo_path": rel_path}
 
+# --- Smart Class & Subject Matching for Teacher Assignment ---
+ROMAN_NUMS = {
+    'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5,
+    'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10,
+    'xi': 11, 'xii': 12
+}
+
+def normalize_class(val: str) -> str:
+    if not val:
+        return ''
+    s = str(val).strip().lower()
+    for k in ['nursery', 'nur', 'lkg', 'ukg', 'kg']:
+        if k in s:
+            return k
+    clean = re.sub(r'\b(class|grade|standard|std)\b', '', s).strip()
+    if clean in ROMAN_NUMS:
+        return str(ROMAN_NUMS[clean])
+    digits = re.findall(r'\d+', s)
+    if digits:
+        return str(int(digits[0]))
+    return re.sub(r'[^a-z0-9]', '', s)
+
+SUBJECT_ALIASES = {
+    # SST
+    'sst': 'social science',
+    'social studies': 'social science',
+    'soc sci': 'social science',
+    'social sci': 'social science',
+    'social science': 'social science',
+    'social sciences': 'social science',
+    # Political Science
+    'pol science': 'political science',
+    'pol sci': 'political science',
+    'political sci': 'political science',
+    'political science': 'political science',
+    # Math
+    'math': 'mathematics',
+    'maths': 'mathematics',
+    'mathematics': 'mathematics',
+    # Physical Ed
+    'pe': 'physical education',
+    'p e': 'physical education',
+    'physical ed': 'physical education',
+    'physical education': 'physical education',
+    'phys ed': 'physical education',
+    # Computers
+    'cs': 'computer science',
+    'computer': 'computer science',
+    'computer science': 'computer science',
+    'computers': 'computer science',
+    'it': 'information technology',
+    'info tech': 'information technology',
+    'information technology': 'information technology',
+    'ip': 'informatics practices',
+    'informatics practices': 'informatics practices',
+    'ai': 'robotics & ai',
+    'robotics': 'robotics & ai',
+    'robotics and ai': 'robotics & ai',
+    'robotics & ai': 'robotics & ai',
+    # Commerce
+    'bst': 'business studies',
+    'b st': 'business studies',
+    'business studies': 'business studies',
+    'business study': 'business studies',
+    'acc': 'accountancy',
+    'accts': 'accountancy',
+    'accounts': 'accountancy',
+    'accountancy': 'accountancy',
+    'eco': 'economics',
+    'economics': 'economics',
+    # Languages
+    'eng': 'english',
+    'english': 'english',
+    'hin': 'hindi',
+    'hindi': 'hindi',
+    'san': 'sanskrit',
+    'skt': 'sanskrit',
+    'sanskrit': 'sanskrit',
+    # Science
+    'sci': 'science',
+    'general science': 'science',
+    'science': 'science',
+    'phy': 'physics',
+    'physics': 'physics',
+    'chem': 'chemistry',
+    'chemistry': 'chemistry',
+    'bio': 'biology',
+    'biology': 'biology',
+    'evs': 'environmental studies',
+    'environmental studies': 'environmental studies',
+    'environmental science': 'environmental studies',
+    # Humanities / Social
+    'geo': 'geography',
+    'geography': 'geography',
+    'hist': 'history',
+    'history': 'history',
+    'history & civics': 'history and civics',
+    'history and civics': 'history and civics',
+    'hist & civ': 'history and civics',
+    'gk': 'general knowledge',
+    'g k': 'general knowledge',
+    'general knowledge': 'general knowledge',
+}
+
+DISTINCT_SCIENCES = {
+    'computer science', 'social science', 'political science', 
+    'home science', 'moral science', 'environmental science'
+}
+
+def clean_subject(s: str) -> str:
+    if not s:
+        return ''
+    s = str(s).strip().lower()
+    s = s.replace('&', ' and ')
+    s = s.replace('.', ' ')
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+def canonical_subject(s: str) -> str:
+    cleaned = clean_subject(s)
+    no_space = cleaned.replace(' ', '')
+    if cleaned in SUBJECT_ALIASES:
+        return SUBJECT_ALIASES[cleaned]
+    if no_space in SUBJECT_ALIASES:
+        return SUBJECT_ALIASES[no_space]
+    return cleaned
+
+def subjects_match(s1: str, s2: str) -> bool:
+    c1 = clean_subject(s1)
+    c2 = clean_subject(s2)
+    if not c1 or not c2:
+        return False
+    if c1 == c2:
+        return True
+    can1 = canonical_subject(s1)
+    can2 = canonical_subject(s2)
+    if can1 == can2:
+        return True
+
+    # Protect 'science' from matching 'computer science', 'social science', etc.
+    if (can1 == 'science' and can2 in DISTINCT_SCIENCES) or (can2 == 'science' and can1 in DISTINCT_SCIENCES):
+        return False
+    if can1 in DISTINCT_SCIENCES and can2 in DISTINCT_SCIENCES and can1 != can2:
+        return False
+
+    # Compound matching (e.g. 'history and civics' matches 'history' or 'civics')
+    words1 = set(re.findall(r'\b\w+\b', can1)) - {'and', 'the', 'of'}
+    words2 = set(re.findall(r'\b\w+\b', can2)) - {'and', 'the', 'of'}
+    if words1 and words2:
+        if 'science' in words1 and len(words2) > 1:
+            return False
+        if 'science' in words2 and len(words1) > 1:
+            return False
+        if words1.issubset(words2) or words2.issubset(words1):
+            return True
+    return False
+
+def match_teacher_to_paper(cls_name: str, subj_name: str, teachers: list) -> Optional[int]:
+    """
+    Given a paper class name and subject name, and a list of teacher dicts,
+    finds the first teacher whose assigned_classes matches this class and subject.
+    """
+    if not cls_name or not subj_name or not teachers:
+        return None
+        
+    p_norm_cls = normalize_class(cls_name)
+    
+    for t in teachers:
+        try:
+            assigned = t.get('assigned_classes')
+            if isinstance(assigned, str):
+                assigned = json.loads(assigned or '[]')
+            if not isinstance(assigned, list):
+                continue
+                
+            for a in assigned:
+                t_cls = a.get('class') or a.get('class_name') or a.get('className') or ''
+                t_sub = a.get('subject') or a.get('sub') or ''
+                if normalize_class(t_cls) == p_norm_cls and subjects_match(t_sub, subj_name):
+                    return t['id']
+        except Exception:
+            continue
+            
+    return None
+
 # --- Teachers ---
 @app.get("/api/teachers")
 async def list_teachers():
@@ -610,8 +802,17 @@ async def add_teacher(data: TeacherCreate):
         INSERT INTO teachers (name, email, pin, phone, assigned_classes)
         VALUES (?, ?, ?, ?, ?)
         ''', (data.name, data.email, data.pin, data.phone, json.dumps(data.assigned_classes or [])))
-        conn.commit()
         teacher_id = cursor.lastrowid
+
+        # Auto-assign any unassigned blueprints matching this new teacher
+        cursor.execute("SELECT id, class_name, subject FROM paper_blueprints WHERE teacher_id IS NULL")
+        unassigned = [dict(r) for r in cursor.fetchall()]
+        dummy_teacher = [{'id': teacher_id, 'assigned_classes': data.assigned_classes or []}]
+        for bp in unassigned:
+            if match_teacher_to_paper(bp['class_name'], bp['subject'], dummy_teacher):
+                cursor.execute("UPDATE paper_blueprints SET teacher_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (teacher_id, bp['id']))
+
+        conn.commit()
         conn.close()
         return {"status": "success", "id": teacher_id}
     except Exception as e:
@@ -627,14 +828,54 @@ async def update_teacher(teacher_id: int, data: TeacherCreate):
     SET name = ?, email = ?, pin = ?, phone = ?, assigned_classes = ?
     WHERE id = ?
     ''', (data.name, data.email, data.pin, data.phone, json.dumps(data.assigned_classes or []), teacher_id))
+
+    # Auto-assign any unassigned blueprints matching this updated teacher
+    cursor.execute("SELECT id, class_name, subject FROM paper_blueprints WHERE teacher_id IS NULL")
+    unassigned = [dict(r) for r in cursor.fetchall()]
+    dummy_teacher = [{'id': teacher_id, 'assigned_classes': data.assigned_classes or []}]
+    for bp in unassigned:
+        if match_teacher_to_paper(bp['class_name'], bp['subject'], dummy_teacher):
+            cursor.execute("UPDATE paper_blueprints SET teacher_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (teacher_id, bp['id']))
+
     conn.commit()
     conn.close()
     return {"status": "success"}
+
+@app.put("/api/teachers/{teacher_id}/papers")
+async def update_teacher_assigned_papers(teacher_id: int, req: TeacherPapersUpdate):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM teachers WHERE id = ?", (teacher_id,))
+    t = cursor.fetchone()
+    if not t:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    # Unassign existing papers currently assigned to this teacher that are NOT in req.blueprint_ids
+    cursor.execute('''
+    UPDATE paper_blueprints
+    SET teacher_id = NULL, updated_at = CURRENT_TIMESTAMP
+    WHERE teacher_id = ?
+    ''', (teacher_id,))
+
+    # Assign the requested papers to this teacher
+    if req.blueprint_ids:
+        placeholders = ','.join('?' for _ in req.blueprint_ids)
+        cursor.execute(f'''
+        UPDATE paper_blueprints
+        SET teacher_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id IN ({placeholders})
+        ''', [teacher_id] + req.blueprint_ids)
+
+    conn.commit()
+    conn.close()
+    return {"status": "success", "assigned_count": len(req.blueprint_ids), "message": f"Successfully updated paper assignments for {t['name']}"}
 
 @app.delete("/api/teachers/{teacher_id}")
 async def delete_teacher(teacher_id: int):
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("UPDATE paper_blueprints SET teacher_id = NULL WHERE teacher_id = ?", (teacher_id,))
     cursor.execute("DELETE FROM teachers WHERE id = ?", (teacher_id,))
     conn.commit()
     conn.close()
@@ -786,20 +1027,27 @@ async def create_blueprint(data: BlueprintCreate):
     validate_blueprint_marks(data.sections_config, data.total_marks)
     conn = get_db()
     cursor = conn.cursor()
+
+    teacher_id = data.teacher_id
+    if not teacher_id:
+        cursor.execute("SELECT id, name, assigned_classes FROM teachers")
+        teachers = [dict(t) for t in cursor.fetchall()]
+        teacher_id = match_teacher_to_paper(data.class_name, data.subject, teachers)
+
     cursor.execute('''
     INSERT INTO paper_blueprints (
         title, class_name, section, subject, teacher_id, duration_minutes, total_marks,
         general_instructions, sections_config, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Assigned')
     ''', (
-        data.title, data.class_name, data.section, data.subject, data.teacher_id,
+        data.title, data.class_name, data.section, data.subject, teacher_id,
         data.duration_minutes, data.total_marks, data.general_instructions or '',
         json.dumps(data.sections_config)
     ))
     conn.commit()
     bp_id = cursor.lastrowid
     conn.close()
-    return {"status": "success", "id": bp_id}
+    return {"status": "success", "id": bp_id, "teacher_id": teacher_id}
 
 @app.post("/api/blueprints/bulk")
 async def create_bulk_blueprints(data: BulkBlueprintCreate):
@@ -825,17 +1073,7 @@ async def create_bulk_blueprints(data: BulkBlueprintCreate):
         for subj in subjects:
             assigned_tid = data.teacher_id
             if not assigned_tid:
-                for t in teachers:
-                    try:
-                        assigned_list = json.loads(t.get('assigned_classes') or '[]')
-                        for a in assigned_list:
-                            if a.get('class') == cls and a.get('subject') == subj:
-                                assigned_tid = t['id']
-                                break
-                        if assigned_tid:
-                            break
-                    except Exception:
-                        pass
+                assigned_tid = match_teacher_to_paper(cls, subj, teachers)
 
             cursor.execute('''
             INSERT INTO paper_blueprints (
@@ -856,6 +1094,100 @@ async def create_bulk_blueprints(data: BulkBlueprintCreate):
         "created_count": len(created_ids),
         "created_ids": created_ids,
         "message": f"Successfully created {len(created_ids)} question paper blueprints!"
+    }
+
+@app.put("/api/blueprints/{bp_id}/assign-teacher")
+async def assign_blueprint_teacher(bp_id: int, req: AssignTeacherRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM paper_blueprints WHERE id = ?", (bp_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+
+    cursor.execute('''
+    UPDATE paper_blueprints
+    SET teacher_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    ''', (req.teacher_id, bp_id))
+    conn.commit()
+
+    teacher_name = None
+    if req.teacher_id:
+        cursor.execute("SELECT name FROM teachers WHERE id = ?", (req.teacher_id,))
+        t_row = cursor.fetchone()
+        if t_row:
+            teacher_name = t_row['name']
+
+    conn.close()
+    return {"status": "success", "teacher_id": req.teacher_id, "teacher_name": teacher_name}
+
+@app.post("/api/blueprints/{bp_id}/auto-assign")
+async def auto_assign_single_blueprint(bp_id: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM paper_blueprints WHERE id = ?", (bp_id,))
+    bp = cursor.fetchone()
+    if not bp:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+
+    cursor.execute("SELECT id, name, assigned_classes FROM teachers")
+    teachers = [dict(t) for t in cursor.fetchall()]
+
+    matched_id = match_teacher_to_paper(bp['class_name'], bp['subject'], teachers)
+    teacher_name = None
+    if matched_id:
+        cursor.execute("UPDATE paper_blueprints SET teacher_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (matched_id, bp_id))
+        conn.commit()
+        cursor.execute("SELECT name FROM teachers WHERE id = ?", (matched_id,))
+        t_row = cursor.fetchone()
+        if t_row:
+            teacher_name = t_row['name']
+    conn.close()
+
+    if matched_id:
+        return {"status": "success", "matched": True, "teacher_id": matched_id, "teacher_name": teacher_name, "message": f"Assigned to {teacher_name}"}
+    else:
+        return {"status": "success", "matched": False, "teacher_id": None, "teacher_name": None, "message": f"No matching teacher found for {bp['class_name']} {bp['subject']}"}
+
+@app.post("/api/blueprints/auto-assign")
+async def auto_assign_all_blueprints(force_all: Optional[bool] = False):
+    conn = get_db()
+    cursor = conn.cursor()
+    if force_all:
+        cursor.execute("SELECT id, class_name, subject, teacher_id FROM paper_blueprints")
+    else:
+        cursor.execute("SELECT id, class_name, subject, teacher_id FROM paper_blueprints WHERE teacher_id IS NULL")
+    blueprints_to_check = [dict(r) for r in cursor.fetchall()]
+
+    cursor.execute("SELECT id, name, assigned_classes FROM teachers")
+    teachers = [dict(t) for t in cursor.fetchall()]
+
+    assigned_count = 0
+    assigned_details = []
+
+    for bp in blueprints_to_check:
+        tid = match_teacher_to_paper(bp['class_name'], bp['subject'], teachers)
+        if tid and tid != bp.get('teacher_id'):
+            cursor.execute("UPDATE paper_blueprints SET teacher_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (tid, bp['id']))
+            assigned_count += 1
+            teacher_name = next((t['name'] for t in teachers if t['id'] == tid), 'Teacher')
+            assigned_details.append({
+                "blueprint_id": bp['id'],
+                "class_name": bp['class_name'],
+                "subject": bp['subject'],
+                "teacher_id": tid,
+                "teacher_name": teacher_name
+            })
+
+    conn.commit()
+    conn.close()
+    return {
+        "status": "success",
+        "assigned_count": assigned_count,
+        "details": assigned_details,
+        "message": f"Successfully auto-assigned {assigned_count} paper(s) to teachers!" if assigned_count > 0 else "All papers are already assigned or no new matching teachers were found."
     }
 
 @app.post("/api/blueprints/{bp_id}/clone")

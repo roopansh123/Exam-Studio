@@ -999,6 +999,9 @@ function renderTeachersTable() {
                         <button class="btn btn-primary btn-sm" onclick="openShareLinkModal(${t.id})" title="Share portal link for teacher's phone with custom validity">
                             📱 Share Link
                         </button>
+                        <button class="btn btn-secondary btn-sm" onclick="openAssignPapersModal(${t.id})" title="Manually assign or unassign papers for this teacher">
+                            📑 Assign Papers
+                        </button>
                         <button class="btn btn-secondary btn-sm" onclick="editTeacher(${t.id})">Edit</button>
                         <button class="btn btn-danger btn-sm" onclick="deleteTeacher(${t.id})">Delete</button>
                     </div>
@@ -1117,8 +1120,11 @@ function copyShareUrl() {
 function populateTeacherSelectDropdown() {
     const sel = document.getElementById('blueprint-teacher-id');
     if (!sel) return;
-    sel.innerHTML = '<option value="">-- Select Teacher to Assign --</option>' + 
-        teachersList.map(t => `<option value="${t.id}">${t.name} (${t.email})</option>`).join('');
+    sel.innerHTML = `
+        <option value="auto" selected>⚡ Auto-Match by Class & Subject</option>
+        <option value="">-- Leave Unassigned --</option>
+        ${teachersList.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${escapeHtml(t.email)})</option>`).join('')}
+    `;
 }
 
 function openAddTeacherModal() {
@@ -1338,7 +1344,20 @@ function renderBlueprintsList() {
 
                 <div style="font-size: 13px; color: var(--dark-muted); margin-top: 8px;">
                     <div>⏱ <strong>${bp.duration_minutes} Mins</strong> | 🎯 <strong>${bp.total_marks} Marks</strong></div>
-                    <div>👤 Teacher: <strong>${bp.teacher_name || 'Unassigned'}</strong></div>
+                    ${isTeacher ? `
+                    <div style="margin-top: 4px;">👤 Teacher: <strong>${escapeHtml(bp.teacher_name || 'Unassigned')}</strong></div>
+                    ` : `
+                    <div style="margin-top: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span style="font-size: 12px; font-weight: 700; color: var(--text-dark);">👤 Teacher:</span>
+                        <select class="form-select form-select-sm" style="flex: 1; min-width: 140px; max-width: 220px; font-size: 12px; padding: 3px 6px; font-weight: 600; border-radius: 6px;" onchange="assignTeacherToBlueprint(${bp.id}, this.value)" title="Change assigned teacher for this paper">
+                            <option value="">-- Unassigned --</option>
+                            ${teachersList.map(t => `<option value="${t.id}" ${t.id === bp.teacher_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-secondary btn-sm" style="padding: 3px 8px; font-size: 11px; font-weight: 600;" onclick="autoAssignSingleBlueprint(${bp.id})" title="Auto-match teacher based on Class & Subject">
+                            ⚡ Auto
+                        </button>
+                    </div>
+                    `}
                 </div>
 
                 <div class="progress-bar-container">
@@ -1519,7 +1538,8 @@ async function handleCreateBlueprint(e) {
     const title = document.getElementById('blueprint-title').value.trim();
     const className = document.getElementById('blueprint-class').value.trim();
     const subject = document.getElementById('blueprint-subject').value.trim();
-    const teacherId = document.getElementById('blueprint-teacher-id').value;
+    const teacherIdVal = document.getElementById('blueprint-teacher-id')?.value;
+    const teacherId = (teacherIdVal && teacherIdVal !== 'auto') ? parseInt(teacherIdVal) : null;
     const duration = parseInt(document.getElementById('blueprint-duration').value) || 180;
     const totalMarks = parseFloat(document.getElementById('blueprint-total-marks').value) || 80;
     const instructions = document.getElementById('blueprint-instructions').value;
@@ -2219,6 +2239,311 @@ function showToast(message, type = 'info') {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     }, 2800);
+}
+
+// ----------------- Teacher Assignment & Auto-Matching -----------------
+let currentAssignTeacherId = null;
+
+function normalizeClassJS(val) {
+    if (!val) return '';
+    let s = String(val).trim().toLowerCase();
+    for (const k of ['nursery', 'nur', 'lkg', 'ukg', 'kg']) {
+        if (s.includes(k)) return k;
+    }
+    const clean = s.replace(/\b(class|grade|standard|std)\b/g, '').trim();
+    const roman = { 'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10, 'xi': 11, 'xii': 12 };
+    if (roman[clean]) return String(roman[clean]);
+    const digits = s.match(/\d+/);
+    if (digits) return String(parseInt(digits[0], 10));
+    return s.replace(/[^a-z0-9]/g, '');
+}
+
+const JS_SUBJECT_ALIASES = {
+    'sst': 'social science', 'social studies': 'social science', 'soc sci': 'social science',
+    'pol science': 'political science', 'pol sci': 'political science', 'political science': 'political science',
+    'math': 'mathematics', 'maths': 'mathematics', 'mathematics': 'mathematics',
+    'pe': 'physical education', 'physical ed': 'physical education', 'physical education': 'physical education',
+    'cs': 'computer science', 'computer': 'computer science', 'computer science': 'computer science',
+    'it': 'information technology', 'information technology': 'information technology',
+    'ip': 'informatics practices', 'ai': 'robotics & ai', 'robotics': 'robotics & ai',
+    'bst': 'business studies', 'business studies': 'business studies',
+    'acc': 'accountancy', 'accounts': 'accountancy', 'accountancy': 'accountancy',
+    'eco': 'economics', 'economics': 'economics',
+    'eng': 'english', 'english': 'english', 'hin': 'hindi', 'hindi': 'hindi',
+    'sci': 'science', 'general science': 'science', 'science': 'science',
+    'phy': 'physics', 'physics': 'physics', 'chem': 'chemistry', 'chemistry': 'chemistry',
+    'bio': 'biology', 'biology': 'biology', 'evs': 'environmental studies',
+    'geo': 'geography', 'geography': 'geography', 'hist': 'history', 'history': 'history',
+    'history & civics': 'history and civics', 'history and civics': 'history and civics'
+};
+
+const JS_DISTINCT_SCIENCES = new Set([
+    'computer science', 'social science', 'political science', 'home science', 'moral science', 'environmental science'
+]);
+
+function cleanSubjectJS(s) {
+    if (!s) return '';
+    return String(s).trim().toLowerCase().replace(/&/g, ' and ').replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function canonicalSubjectJS(s) {
+    const c = cleanSubjectJS(s);
+    const noSpace = c.replace(/\s+/g, '');
+    if (JS_SUBJECT_ALIASES[c]) return JS_SUBJECT_ALIASES[c];
+    if (JS_SUBJECT_ALIASES[noSpace]) return JS_SUBJECT_ALIASES[noSpace];
+    return c;
+}
+
+function subjectsMatchJS(s1, s2) {
+    const c1 = cleanSubjectJS(s1);
+    const c2 = cleanSubjectJS(s2);
+    if (!c1 || !c2) return false;
+    if (c1 === c2) return true;
+    const can1 = canonicalSubjectJS(s1);
+    const can2 = canonicalSubjectJS(s2);
+    if (can1 === can2) return true;
+
+    if ((can1 === 'science' && JS_DISTINCT_SCIENCES.has(can2)) || (can2 === 'science' && JS_DISTINCT_SCIENCES.has(can1))) return false;
+    if (JS_DISTINCT_SCIENCES.has(can1) && JS_DISTINCT_SCIENCES.has(can2) && can1 !== can2) return false;
+
+    const w1 = new Set(can1.match(/\b\w+\b/g) || []);
+    const w2 = new Set(can2.match(/\b\w+\b/g) || []);
+    w1.delete('and'); w1.delete('the'); w1.delete('of');
+    w2.delete('and'); w2.delete('the'); w2.delete('of');
+    if (w1.size > 0 && w2.size > 0) {
+        if (w1.has('science') && w2.size > 1) return false;
+        if (w2.has('science') && w1.size > 1) return false;
+        const isSubset = (subset, set) => [...subset].every(x => set.has(x));
+        if (isSubset(w1, w2) || isSubset(w2, w1)) return true;
+    }
+    return false;
+}
+
+async function assignTeacherToBlueprint(bpId, teacherId) {
+    try {
+        const payload = { teacher_id: teacherId ? parseInt(teacherId) : null };
+        const res = await fetch(`/api/blueprints/${bpId}/assign-teacher`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        // Update in memory
+        const bp = blueprints.find(b => b.id === bpId);
+        if (bp) {
+            bp.teacher_id = data.teacher_id;
+            bp.teacher_name = data.teacher_name;
+        }
+
+        renderTeachersTable();
+        showToast(data.teacher_name ? `Assigned to ${data.teacher_name}!` : 'Paper marked unassigned', 'success');
+    } catch (e) {
+        console.error(e);
+        alert('Failed to update teacher: ' + e.message);
+    }
+}
+
+async function autoAssignSingleBlueprint(bpId) {
+    try {
+        const res = await fetch(`/api/blueprints/${bpId}/auto-assign`, { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (data.matched) {
+            showToast(`⚡ ${data.message}`, 'success');
+            await loadBlueprints();
+            await loadTeachers();
+        } else {
+            alert(`⚠️ ${data.message}`);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Auto-assign failed: ' + e.message);
+    }
+}
+
+async function runAutoAssignAll() {
+    try {
+        const res = await fetch('/api/blueprints/auto-assign', { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        showToast(data.message, data.assigned_count > 0 ? 'success' : 'info');
+        await loadBlueprints();
+        await loadTeachers();
+    } catch (e) {
+        console.error(e);
+        alert('Auto-assign failed: ' + e.message);
+    }
+}
+
+function openAssignPapersModal(teacherId) {
+    currentAssignTeacherId = teacherId;
+    const t = teachersList.find(x => x.id === teacherId);
+    if (!t) return;
+
+    const nameEl = document.getElementById('assign-modal-teacher-name');
+    if (nameEl) nameEl.innerText = t.name;
+
+    const classesDiv = document.getElementById('assign-modal-teacher-classes');
+    if (classesDiv) {
+        if (!t.assigned_classes || t.assigned_classes.length === 0) {
+            classesDiv.innerHTML = '<span style="color: #94a3b8; font-style: italic; font-size: 12px;">No classes assigned in profile yet.</span>';
+        } else {
+            classesDiv.innerHTML = t.assigned_classes.map(a => 
+                `<span class="badge badge-assigned" style="font-size: 11px; padding: 2px 8px;">${escapeHtml(a.class || '')} - ${escapeHtml(a.subject || '')}</span>`
+            ).join('');
+        }
+    }
+
+    const searchInput = document.getElementById('assign-paper-search');
+    if (searchInput) searchInput.value = '';
+
+    renderAssignPapersList();
+    document.getElementById('assign-papers-modal').classList.add('active');
+}
+
+function closeAssignPapersModal() {
+    const modal = document.getElementById('assign-papers-modal');
+    if (modal) modal.classList.remove('active');
+    currentAssignTeacherId = null;
+}
+
+function renderAssignPapersList() {
+    const container = document.getElementById('assign-papers-list-container');
+    if (!container) return;
+
+    const searchTerm = (document.getElementById('assign-paper-search')?.value || '').toLowerCase().trim();
+
+    if (blueprints.length === 0) {
+        container.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No question papers exist yet.</div>';
+        updateAssignPapersCount();
+        return;
+    }
+
+    const filtered = blueprints.filter(b => {
+        if (!searchTerm) return true;
+        const text = `${b.title} ${b.class_name} ${b.subject}`.toLowerCase();
+        return text.includes(searchTerm);
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No matching papers found.</div>';
+        updateAssignPapersCount();
+        return;
+    }
+
+    container.innerHTML = filtered.map(b => {
+        const isCurrentTeacher = b.teacher_id === currentAssignTeacherId;
+        const otherTeacherName = (!isCurrentTeacher && b.teacher_name) ? b.teacher_name : null;
+
+        return `
+            <label class="assign-paper-item" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; margin-bottom: 4px; background: white; border-radius: 6px; border: 1px solid var(--border-color); cursor: pointer; transition: all 0.15s ease;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" class="assign-paper-chk" value="${b.id}" data-class="${escapeHtml(b.class_name)}" data-subject="${escapeHtml(b.subject)}" ${isCurrentTeacher ? 'checked' : ''} onchange="updateAssignPapersCount()">
+                    <div>
+                        <div style="font-weight: 700; font-size: 13px; color: var(--text-dark);">
+                            <span style="color: var(--primary);">${escapeHtml(b.class_name)}</span> • ${escapeHtml(b.subject)}
+                        </div>
+                        <div style="font-size: 11.5px; color: var(--text-muted);">
+                            ${escapeHtml(b.title)} (${b.total_marks} Marks)
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    ${otherTeacherName ? `<span style="font-size: 11px; color: #d97706; background: #fef3c7; padding: 2px 7px; border-radius: 4px; font-weight: 600;">Assigned: ${escapeHtml(otherTeacherName)}</span>` : (isCurrentTeacher ? `<span style="font-size: 11px; color: #16a34a; background: #dcfce7; padding: 2px 7px; border-radius: 4px; font-weight: 600;">✓ Assigned</span>` : `<span style="font-size: 11px; color: #94a3b8;">Unassigned</span>`)}
+                </div>
+            </label>
+        `;
+    }).join('');
+
+    updateAssignPapersCount();
+}
+
+function filterAssignPapersList() {
+    renderAssignPapersList();
+}
+
+function updateAssignPapersCount() {
+    const checked = document.querySelectorAll('.assign-paper-chk:checked').length;
+    const el = document.getElementById('assign-papers-selected-count');
+    if (el) el.innerText = `${checked} paper${checked === 1 ? '' : 's'} selected`;
+}
+
+function toggleSelectAllAssignPapers(checkAll) {
+    const chks = document.querySelectorAll('.assign-paper-chk');
+    chks.forEach(c => c.checked = checkAll);
+    updateAssignPapersCount();
+}
+
+function autoCheckTeacherMatchingPapers() {
+    if (!currentAssignTeacherId) return;
+    const t = teachersList.find(x => x.id === currentAssignTeacherId);
+    if (!t || !t.assigned_classes || t.assigned_classes.length === 0) {
+        alert('This teacher has no classes or subjects assigned in their profile.');
+        return;
+    }
+
+    const chks = document.querySelectorAll('.assign-paper-chk');
+    let matchedCount = 0;
+
+    chks.forEach(chk => {
+        const bpClass = chk.getAttribute('data-class');
+        const bpSubject = chk.getAttribute('data-subject');
+        const normBpClass = normalizeClassJS(bpClass);
+
+        let matches = false;
+        for (const a of t.assigned_classes) {
+            const tClass = a.class || a.class_name || '';
+            const tSubject = a.subject || a.sub || '';
+            if (normalizeClassJS(tClass) === normBpClass && subjectsMatchJS(tSubject, bpSubject)) {
+                matches = true;
+                break;
+            }
+        }
+
+        if (matches) {
+            chk.checked = true;
+            matchedCount++;
+        }
+    });
+
+    updateAssignPapersCount();
+    showToast(`⚡ Selected ${matchedCount} matching papers!`, 'success');
+}
+
+async function saveTeacherPaperAssignments() {
+    if (!currentAssignTeacherId) return;
+    const checkedBoxes = Array.from(document.querySelectorAll('.assign-paper-chk:checked'));
+    const blueprintIds = checkedBoxes.map(c => parseInt(c.value));
+
+    const saveBtn = document.getElementById('btn-save-assign-papers');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = 'Saving...';
+    }
+
+    try {
+        const res = await fetch(`/api/teachers/${currentAssignTeacherId}/papers`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blueprint_ids: blueprintIds })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        showToast(data.message || 'Paper assignments saved!', 'success');
+        closeAssignPapersModal();
+        await loadBlueprints();
+        await loadTeachers();
+    } catch (e) {
+        console.error(e);
+        alert('Failed to save paper assignments: ' + e.message);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerText = 'Save Assigned Papers';
+        }
+    }
 }
 
 function initEventListeners() {
