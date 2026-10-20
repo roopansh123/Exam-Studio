@@ -643,6 +643,10 @@
                                 </select>
                             </div>
                         </div>
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color); font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <span>💡 Looking for official API keys? Obtain credentials from <a href="https://developers.facebook.com/apps/" target="_blank" style="color: #0284c7; font-weight: 700; text-decoration: underline;">Meta for Developers Portal</a>.</span>
+                            <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" style="color: #0284c7; font-size: 11px; font-weight: 700; text-decoration: underline;">WhatsApp Cloud API Setup Guide ↗</a>
+                        </div>
                     </div>
 
                     <!-- 1. OFFICIAL WHATSAPP BARCODE LINKED DEVICE PANEL -->
@@ -731,9 +735,45 @@
 
                     <!-- 3. META WHATSAPP CLOUD API PANEL (When in cloud_api mode) -->
                     <div id="wa-cloud-api-panel" style="display: none;">
-                        <div style="font-size: 13.5px; font-weight: 700; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
-                            <span>☁️ Meta WhatsApp Cloud API Dynamic Configuration</span>
-                            <span style="font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 1px 8px; border-radius: 10px; font-weight: 700;">Official API</span>
+                        <div style="font-size: 13.5px; font-weight: 700; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span>☁️ Meta WhatsApp Cloud API Dynamic Configuration</span>
+                                <span style="font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 1px 8px; border-radius: 10px; font-weight: 700;">Official API</span>
+                            </div>
+                            <a href="https://developers.facebook.com/apps/" target="_blank" class="btn btn-secondary btn-sm" style="font-size: 11px; color: #0284c7; border-color: #bae6fd; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                <span>🔑 Meta Developer Portal</span> ↗
+                            </a>
+                        </div>
+
+                        <!-- Where to obtain API Key Guide Card -->
+                        <div style="background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; font-size: 12px; color: #0369a1; line-height: 1.6;">
+                            <div style="font-size: 13px; font-weight: 800; color: #0369a1; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                                <span>🔗 Where to Obtain Your WhatsApp API Key &amp; Credentials:</span>
+                            </div>
+                            <p style="margin-bottom: 8px; color: #0c4a6e;">
+                                To obtain your official WhatsApp API Key (Access Token) and Phone Number ID, visit the Meta Developer portal:
+                            </p>
+                            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                                <a href="https://developers.facebook.com/apps/" target="_blank" class="btn btn-secondary btn-sm" style="font-size: 11px; font-weight: 700; color: #0284c7; background: white; border: 1px solid #7dd3fc; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                    <span>🌐 1. Meta App Dashboard</span> ↗
+                                </a>
+                                <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" class="btn btn-secondary btn-sm" style="font-size: 11px; font-weight: 700; color: #0284c7; background: white; border: 1px solid #7dd3fc; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                    <span>📖 2. WhatsApp API Quickstart Guide</span> ↗
+                                </a>
+                                <a href="https://business.facebook.com/settings/system-users" target="_blank" class="btn btn-secondary btn-sm" style="font-size: 11px; font-weight: 700; color: #0284c7; background: white; border: 1px solid #7dd3fc; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                    <span>🛡️ 3. Permanent Token (System Users)</span> ↗
+                                </a>
+                            </div>
+                            <div style="background: white; border: 1px solid #e0f2fe; border-radius: 6px; padding: 10px 12px; font-size: 11.5px; color: #334155;">
+                                <strong>Step-by-step instructions to get keys:</strong>
+                                <ol style="margin: 4px 0 0 16px; padding: 0; line-height: 1.7;">
+                                    <li>Go to <a href="https://developers.facebook.com/apps/" target="_blank" style="color: #0284c7; font-weight: 600;">developers.facebook.com/apps</a> and log in with your Facebook/Meta account.</li>
+                                    <li>Click <strong>Create App</strong> &gt; Select <strong>Other</strong> &gt; Select <strong>Business</strong> as the app type.</li>
+                                    <li>Add the <strong>WhatsApp</strong> product to your app.</li>
+                                    <li>In the left sidebar under <strong>WhatsApp &gt; API Setup</strong>, you will find your <strong>Phone Number ID</strong> and temporary <strong>Access Token</strong>.</li>
+                                    <li>For a permanent token that never expires, generate a token under <a href="https://business.facebook.com/settings/system-users" target="_blank" style="color: #0284c7; font-weight: 600;">Meta Business Settings &gt; System Users</a> with <code>whatsapp_business_messaging</code> permission.</li>
+                                </ol>
+                            </div>
                         </div>
 
                         <div class="form-row">
@@ -748,7 +788,10 @@
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Meta Permanent Access Token (Bearer Token) *</label>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <label class="form-label" style="margin-bottom: 0;">Meta Permanent Access Token (Bearer Token) *</label>
+                                <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" style="font-size: 11px; color: #0284c7; font-weight: 600; text-decoration: underline;">How to get this token? ↗</a>
+                            </div>
                             <div style="display: flex; gap: 8px;">
                                 <input type="password" id="wa-setting-access-token" class="form-input" placeholder="EAABw..." style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">
                                 <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility()">👁 Show</button>
