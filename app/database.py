@@ -123,6 +123,26 @@ def init_db():
     if 'admin_password' not in existing_cols:
         cursor.execute("ALTER TABLE school_settings ADD COLUMN admin_password TEXT DEFAULT 'admin123'")
 
+    # WhatsApp Bot & Integration Settings
+    if 'whatsapp_enabled' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_enabled INTEGER DEFAULT 0")
+    if 'whatsapp_mode' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_mode TEXT DEFAULT 'hybrid'")
+    if 'whatsapp_bot_phone' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_bot_phone TEXT DEFAULT ''")
+    if 'whatsapp_phone_number_id' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_phone_number_id TEXT DEFAULT ''")
+    if 'whatsapp_access_token' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_access_token TEXT DEFAULT ''")
+    if 'whatsapp_verify_token' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_verify_token TEXT DEFAULT 'lkcs_exam_studio_verify_token'")
+    if 'whatsapp_business_account_id' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_business_account_id TEXT DEFAULT ''")
+    if 'whatsapp_welcome_message' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_welcome_message TEXT DEFAULT ''")
+    if 'whatsapp_session_connected' not in existing_cols:
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_session_connected INTEGER DEFAULT 0")
+
     DEFAULT_SUBJECTS = json.dumps([
         "English", "Hindi", "Mathematics", "Science", "Social Science",
         "Physics", "Chemistry", "Biology", "Computer Science", "Information Technology",

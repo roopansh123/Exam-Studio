@@ -207,9 +207,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updateNavUserSessionUI();
 
-    // 7. Load global configs
     try { await loadNetworkInfo(); } catch (e) { console.error('Network info error', e); }
-    try { await loadSchoolSettings(); } catch (e) { console.error('School settings error', e); }
+    try { await loadSchoolSettings(); await loadWhatsAppSettings(); } catch (e) { console.error('School settings error', e); }
     try { await loadTeachers(); } catch (e) { console.error('Teachers load error', e); }
     try { await loadBlueprints(); } catch (e) { console.error('Blueprints load error', e); }
     updateRoleUI();
@@ -548,7 +547,7 @@ function switchTab(tabId) {
 
     if (tabId === 'tab-papers') loadBlueprints();
     if (tabId === 'tab-teachers') loadTeachers();
-    if (tabId === 'tab-settings') loadSchoolSettings();
+    if (tabId === 'tab-settings') { loadSchoolSettings(); loadWhatsAppSettings(); }
 }
 
 function setRole(role) {
@@ -986,7 +985,10 @@ function renderTeachersTable() {
 
         return `
             <tr>
-                <td><strong>${t.name}</strong></td>
+                <td>
+                    <strong>${t.name}</strong>
+                    ${t.phone ? `<div style="font-size: 11px; color: #166534; font-weight: 600; margin-top: 2px;">📞 ${t.phone}</div>` : `<div style="font-size: 11px; color: #94a3b8; font-style: italic;">No phone</div>`}
+                </td>
                 <td>${t.email}</td>
                 <td><code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${t.pin}</code></td>
                 <td>${assignmentsHtml || '<span style="color: #94a3b8;">None</span>'}</td>
@@ -998,6 +1000,9 @@ function renderTeachersTable() {
                     <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
                         <button class="btn btn-primary btn-sm" onclick="openShareLinkModal(${t.id})" title="Share portal link for teacher's phone with custom validity">
                             📱 Share Link
+                        </button>
+                        <button class="btn btn-sm" onclick="openTeacherWhatsAppModal(${t.id})" style="background: #25D366; color: white; border: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Share blueprint on WhatsApp">
+                            💬 WhatsApp
                         </button>
                         <button class="btn btn-secondary btn-sm" onclick="openAssignPapersModal(${t.id})" title="Manually assign or unassign papers for this teacher">
                             📑 Assign Papers
@@ -1315,6 +1320,9 @@ function renderBlueprintsList() {
                 <a href="/api/paper/${bp.id}/docx" class="btn btn-emerald btn-sm" title="Download Word Document">
                     📄 Word (.docx)
                 </a>
+                <button class="btn btn-sm" onclick="openWhatsAppShareModal(${bp.id})" style="background: #25D366; color: white; border: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Share blueprint on WhatsApp with teacher">
+                    💬 WhatsApp
+                </button>
                 <button class="btn btn-secondary btn-sm" onclick="cloneBlueprint(${bp.id})" title="Duplicate this blueprint for another class or section">
                     📋 Copy
                 </button>
@@ -2569,3 +2577,288 @@ function initEventListeners() {
     // Default sections for new blueprint form
     resetBlueprintForm();
 }
+
+// ==========================================
+// 💬 WhatsApp Bot & Sharing Integration
+// ==========================================
+
+let whatsAppSettings = {};
+let currentWhatsAppBlueprintId = null;
+let currentWhatsAppTeacherId = null;
+let currentWhatsAppMessageText = '';
+
+async function loadWhatsAppSettings() {
+    try {
+        const res = await fetch('/api/whatsapp/settings');
+        if (!res.ok) return;
+        whatsAppSettings = await res.json();
+
+        const enabledSelect = document.getElementById('wa-setting-enabled');
+        if (enabledSelect) enabledSelect.value = whatsAppSettings.whatsapp_enabled ? '1' : '0';
+
+        const modeSelect = document.getElementById('wa-setting-mode');
+        if (modeSelect) modeSelect.value = whatsAppSettings.whatsapp_mode || 'hybrid';
+
+        const botPhone = document.getElementById('wa-setting-bot-phone');
+        if (botPhone) botPhone.value = whatsAppSettings.whatsapp_bot_phone || '';
+
+        const phoneId = document.getElementById('wa-setting-phone-id');
+        if (phoneId) phoneId.value = whatsAppSettings.whatsapp_phone_number_id || '';
+
+        const tokenInput = document.getElementById('wa-setting-access-token');
+        if (tokenInput) tokenInput.value = whatsAppSettings.whatsapp_access_token || '';
+
+        const verifyToken = document.getElementById('wa-setting-verify-token');
+        if (verifyToken) verifyToken.value = whatsAppSettings.whatsapp_verify_token || 'lkcs_exam_studio_verify_token';
+
+        const webhookUrlInput = document.getElementById('wa-setting-webhook-url');
+        if (webhookUrlInput) webhookUrlInput.value = whatsAppSettings.webhook_url || '';
+
+        const qrImg = document.getElementById('wa-setup-qr-img');
+        if (qrImg && whatsAppSettings.bot_qr_code) qrImg.src = whatsAppSettings.bot_qr_code;
+
+        // Connection badge
+        const badge = document.getElementById('wa-connection-badge');
+        if (badge) {
+            if (whatsAppSettings.whatsapp_enabled) {
+                badge.innerText = '🟢 Active & Ready';
+                badge.style.background = '#dcfce7';
+                badge.style.color = '#15803d';
+                badge.style.borderColor = '#86efac';
+            } else {
+                badge.innerText = '⚪ Disabled';
+                badge.style.background = '#f1f5f9';
+                badge.style.color = '#64748b';
+                badge.style.borderColor = '#cbd5e1';
+            }
+        }
+
+        toggleWhatsAppModeUI();
+    } catch (e) {
+        console.error('Failed to load WhatsApp settings', e);
+    }
+}
+
+function toggleWhatsAppModeUI() {
+    const modeSelect = document.getElementById('wa-setting-mode');
+    const cloudPanel = document.getElementById('wa-cloud-api-panel');
+    if (!modeSelect || !cloudPanel) return;
+
+    const mode = modeSelect.value;
+    cloudPanel.style.display = (mode === 'direct') ? 'none' : 'block';
+}
+
+function toggleTokenVisibility() {
+    const input = document.getElementById('wa-setting-access-token');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function copyWebhookUrl() {
+    const input = document.getElementById('wa-setting-webhook-url');
+    if (!input || !input.value) return;
+    navigator.clipboard.writeText(input.value).then(() => {
+        showToast('Webhook Callback URL copied! Paste into Meta Developer Dashboard.', 'success');
+    });
+}
+
+async function handleSaveWhatsAppSettings(e) {
+    if (e) e.preventDefault();
+    const btn = document.getElementById('btn-save-wa-settings');
+    if (btn) btn.disabled = true;
+
+    const payload = {
+        whatsapp_enabled: document.getElementById('wa-setting-enabled')?.value === '1',
+        whatsapp_mode: document.getElementById('wa-setting-mode')?.value || 'hybrid',
+        whatsapp_bot_phone: document.getElementById('wa-setting-bot-phone')?.value.trim() || '',
+        whatsapp_phone_number_id: document.getElementById('wa-setting-phone-id')?.value.trim() || '',
+        whatsapp_access_token: document.getElementById('wa-setting-access-token')?.value.trim() || '',
+        whatsapp_verify_token: document.getElementById('wa-setting-verify-token')?.value.trim() || 'lkcs_exam_studio_verify_token',
+        whatsapp_business_account_id: '',
+        whatsapp_welcome_message: ''
+    };
+
+    try {
+        const res = await fetch('/api/whatsapp/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        showToast('WhatsApp Bot & API configuration saved successfully!', 'success');
+        await loadWhatsAppSettings();
+    } catch (err) {
+        alert('Failed to save WhatsApp settings: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function sendTestWhatsAppMessage() {
+    const phoneInput = document.getElementById('wa-test-phone');
+    if (!phoneInput || !phoneInput.value.trim()) {
+        alert('Please enter a recipient phone number with country code (e.g. 9876543210)');
+        return;
+    }
+
+    try {
+        showToast('Sending test WhatsApp message...', 'info');
+        const res = await fetch('/api/whatsapp/test-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to_phone: phoneInput.value.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Test failed');
+        showToast(data.message || 'Test message sent successfully!', 'success');
+    } catch (err) {
+        alert('WhatsApp Test Error: ' + err.message);
+    }
+}
+
+function openTestChatWithBot() {
+    const botPhone = document.getElementById('wa-setting-bot-phone')?.value.trim() || whatsAppSettings.whatsapp_bot_phone;
+    if (botPhone) {
+        const clean = botPhone.replace(/\D/g, '');
+        window.open(`https://wa.me/${clean}?text=Hi`, '_blank');
+    } else {
+        alert('Please enter and save the School Bot Phone Number first.');
+    }
+}
+
+// ----------------- Share Blueprint on WhatsApp Modal -----------------
+async function openWhatsAppShareModal(blueprintId) {
+    currentWhatsAppBlueprintId = blueprintId;
+    const modal = document.getElementById('whatsapp-share-modal');
+    if (!modal) return;
+
+    modal.classList.add('active');
+    document.getElementById('wa-bubble-content').innerText = 'Generating formatted WhatsApp blueprint message...';
+
+    try {
+        const res = await fetch(`/api/whatsapp/share-blueprint/${blueprintId}`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        currentWhatsAppMessageText = data.message;
+        currentWhatsAppTeacherId = null;
+
+        const bp = blueprints.find(b => b.id === blueprintId);
+        if (bp && bp.teacher_id) currentWhatsAppTeacherId = bp.teacher_id;
+
+        document.getElementById('wa-teacher-name').innerText = data.teacher_name || 'Unassigned';
+        document.getElementById('wa-teacher-phone').value = data.teacher_phone || '';
+        document.getElementById('wa-bubble-content').innerText = data.message;
+        
+        if (data.qr_code) {
+            document.getElementById('wa-qr-img').src = data.qr_code;
+        }
+
+        const openBtn = document.getElementById('btn-open-wa-me');
+        if (openBtn) openBtn.href = data.wa_me_url || '#';
+
+        // Update send via bot button visibility based on Cloud API settings
+        const botBtn = document.getElementById('btn-send-wa-bot');
+        if (botBtn) {
+            botBtn.style.display = (whatsAppSettings.whatsapp_access_token && whatsAppSettings.whatsapp_phone_number_id) ? 'inline-block' : 'none';
+        }
+    } catch (err) {
+        document.getElementById('wa-bubble-content').innerText = 'Failed to load blueprint details: ' + err.message;
+    }
+}
+
+function closeWhatsAppShareModal() {
+    const modal = document.getElementById('whatsapp-share-modal');
+    if (modal) modal.classList.remove('active');
+}
+
+function copyWhatsAppMessageText() {
+    if (!currentWhatsAppMessageText) return;
+    navigator.clipboard.writeText(currentWhatsAppMessageText).then(() => {
+        showToast('WhatsApp blueprint text copied to clipboard!', 'success');
+    });
+}
+
+async function updateTeacherPhoneFromWhatsAppModal() {
+    if (!currentWhatsAppTeacherId) {
+        alert('No teacher is assigned to this paper. Assign a teacher first in the blueprint editor.');
+        return;
+    }
+    const phone = document.getElementById('wa-teacher-phone')?.value.trim();
+    const teacher = teachersList.find(t => t.id === currentWhatsAppTeacherId);
+    if (!teacher) return;
+
+    try {
+        const res = await fetch(`/api/teachers/${currentWhatsAppTeacherId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: teacher.name,
+                email: teacher.email,
+                pin: teacher.pin,
+                phone: phone,
+                assigned_classes: teacher.assigned_classes || []
+            })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        showToast('Teacher phone number updated successfully!', 'success');
+        await loadTeachers();
+        if (currentWhatsAppBlueprintId) {
+            openWhatsAppShareModal(currentWhatsAppBlueprintId);
+        }
+    } catch (e) {
+        alert('Failed to update teacher phone: ' + e.message);
+    }
+}
+
+async function sendBlueprintViaWhatsAppBot() {
+    if (!currentWhatsAppBlueprintId) return;
+    const btn = document.getElementById('btn-send-wa-bot');
+    if (btn) btn.disabled = true;
+
+    try {
+        showToast('Dispatching blueprint via Meta WhatsApp Bot...', 'info');
+        const res = await fetch(`/api/whatsapp/send-blueprint/${currentWhatsAppBlueprintId}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Dispatch failed');
+        showToast(data.message || 'Blueprint sent to teacher on WhatsApp!', 'success');
+    } catch (err) {
+        alert('WhatsApp Bot Send Error: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function openTeacherWhatsAppModal(teacherId) {
+    const tBlueprints = blueprints.filter(b => b.teacher_id === teacherId);
+    if (tBlueprints.length === 0) {
+        alert('No examination papers currently assigned to this teacher. Please assign a paper first.');
+        return;
+    }
+    openWhatsAppShareModal(tBlueprints[0].id);
+}
+
+function shareTeacherPortalOnWhatsApp() {
+    const input = document.getElementById('share-url-input');
+    const url = input ? input.value : '';
+    const teacher = teachersList.find(t => t.id === currentShareTeacherId);
+    const teacherName = teacher ? teacher.name : 'Teacher';
+    const teacherPhone = teacher ? (teacher.phone || '') : '';
+
+    const text = (
+        `🏛️ *LORD KRISHNA CONVENT SCHOOL*\n` +
+        `📋 *Question Paper Submission Portal Link*\n\n` +
+        `Dear *${teacherName}*,\n` +
+        `Here is your secure examination portal link to view assigned blueprints and submit question papers:\n\n` +
+        `👉 ${url}\n\n` +
+        `⏱ Valid for today. Questions lock immediately upon submission.\n` +
+        `_LKCS Exam Studio Academic Portal_`
+    );
+
+    const clean = teacherPhone.replace(/\D/g, '');
+    const waUrl = clean ? `https://wa.me/${clean}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank');
+}
+

@@ -606,6 +606,136 @@
                     </div>
                 </form>
             </div>
+
+            <!-- WhatsApp Bot & Dynamic Messaging Setup Panel -->
+            <div class="form-panel" style="margin-top: 24px; border: 1px solid #bbf7d0; background: #ffffff;">
+                <div class="form-section-title" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border-bottom: 2px solid #22c55e; padding-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 20px;">💬</span>
+                        <span style="color: #166534; font-weight: 800;">WhatsApp Bot & Automatic Question Collection Setup</span>
+                    </div>
+                    <div id="wa-connection-badge" style="font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 20px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
+                        🟢 Hybrid Mode Ready
+                    </div>
+                </div>
+
+                <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 10px; margin-bottom: 16px; line-height: 1.5;">
+                    Share question paper blueprints directly to teachers' WhatsApp chats. Teachers can either tap the 1-click mobile portal link or reply directly in WhatsApp to submit questions according to the blueprint.
+                </p>
+
+                <form id="whatsapp-settings-form" onsubmit="handleSaveWhatsAppSettings(event)">
+                    <!-- Mode & Status Toggle -->
+                    <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 18px;">
+                        <div class="form-row" style="margin-bottom: 0;">
+                            <div class="form-group" style="flex: 1.2;">
+                                <label class="form-label">WhatsApp Integration State</label>
+                                <select id="wa-setting-enabled" class="form-select">
+                                    <option value="1">ON - Enabled (Active Sharing & Bot Webhooks)</option>
+                                    <option value="0">OFF - Disabled</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1.5;">
+                                <label class="form-label">Integration & Connection Mode</label>
+                                <select id="wa-setting-mode" class="form-select" onchange="toggleWhatsAppModeUI()">
+                                    <option value="hybrid" selected>Hybrid: 1-Click WhatsApp Direct + Meta Cloud Bot</option>
+                                    <option value="cloud_api">Meta WhatsApp Cloud API (Official Webhook Bot)</option>
+                                    <option value="direct">1-Click WhatsApp Direct Sharing (Zero Setup / Free)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Barcode / QR Code Quick Scan Card -->
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 20px; display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: center;">
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; padding: 10px; border-radius: 10px; border: 1px solid #86efac; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                            <img id="wa-setup-qr-img" src="" alt="WhatsApp Connection QR Code" style="width: 120px; height: 120px; border-radius: 4px;">
+                            <span style="font-size: 10px; font-weight: 700; color: #166534; margin-top: 6px; text-transform: uppercase;">Scan Barcode</span>
+                        </div>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 800; color: #166534; margin-bottom: 4px;">
+                                📱 Connect via Phone Barcode / QR Scan
+                            </div>
+                            <p style="font-size: 12px; color: #15803d; margin-bottom: 10px; line-height: 1.4;">
+                                Scan this barcode with any smartphone camera or WhatsApp scanner to instantly start a chat with the LKCS Exam Studio channel. Teachers can send questions, view blueprints, and check progress 24/7.
+                            </p>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="loadWhatsAppSettings()" style="font-size: 11px;">
+                                    🔄 Refresh QR Barcode
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="openTestChatWithBot()" style="font-size: 11px;">
+                                    💬 Open Bot Chat
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Meta WhatsApp Cloud API Dynamic Settings -->
+                    <div id="wa-cloud-api-panel">
+                        <div style="font-size: 13.5px; font-weight: 700; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                            <span>☁️ Meta WhatsApp Cloud API Dynamic Configuration</span>
+                            <span style="font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 1px 8px; border-radius: 10px; font-weight: 700;">Official API</span>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1.2;">
+                                <label class="form-label">School Bot WhatsApp Phone Number</label>
+                                <input type="text" id="wa-setting-bot-phone" class="form-input" placeholder="e.g. 919876543210 (Country code + number)">
+                            </div>
+                            <div class="form-group" style="flex: 1.2;">
+                                <label class="form-label">WhatsApp Phone Number ID *</label>
+                                <input type="text" id="wa-setting-phone-id" class="form-input" placeholder="e.g. 102938475610293">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Meta Permanent Access Token (Bearer Token) *</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="password" id="wa-setting-access-token" class="form-input" placeholder="EAABw..." style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleTokenVisibility()">👁 Show</button>
+                            </div>
+                        </div>
+
+                        <!-- Webhook URL Display (Automatically generated with tunnel public URL!) -->
+                        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; margin-top: 14px; margin-bottom: 14px;">
+                            <div style="font-size: 12.5px; font-weight: 700; color: #1e40af; margin-bottom: 4px;">
+                                📡 Webhook Callback URL (Paste into Meta App Dashboard)
+                            </div>
+                            <p style="font-size: 11.5px; color: #1e3a8a; margin-bottom: 8px;">
+                                Meta sends incoming teacher questions and chats to this URL in real-time. It is automatically synchronized with your active Cloudflare tunnel:
+                            </p>
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <input type="text" id="wa-setting-webhook-url" class="form-input" readonly style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; background: white; color: #1e40af; font-weight: 600;">
+                                <button type="button" class="btn btn-primary btn-sm" onclick="copyWebhookUrl()">📋 Copy URL</button>
+                            </div>
+                            <div class="form-row" style="margin-bottom: 0;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label class="form-label" style="font-size: 11px; color: #1e3a8a;">Webhook Verification Token</label>
+                                    <input type="text" id="wa-setting-verify-token" class="form-input" value="lkcs_exam_studio_verify_token" style="font-size: 12px; font-family: monospace;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Message Delivery Test Tool -->
+                        <div style="background: #fdf4ff; border: 1px solid #f0abfc; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px;">
+                            <div style="font-size: 12.5px; font-weight: 700; color: #86198f; margin-bottom: 4px;">
+                                🧪 Test WhatsApp Connection Live
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                                <input type="text" id="wa-test-phone" class="form-input" placeholder="Recipient phone (e.g. 9876543210)" style="max-width: 250px;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="sendTestWhatsAppMessage()" style="white-space: nowrap; font-weight: 700;">
+                                    🚀 Send Test Message
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; margin-top: 18px;">
+                        <button type="submit" class="btn btn-primary" id="btn-save-wa-settings">
+                            Save WhatsApp Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
     </main>
@@ -819,6 +949,9 @@
                         <input type="text" id="share-url-input" class="form-input" readonly style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">
                         <button class="btn btn-secondary btn-sm" onclick="copyShareUrl()">📋 Copy</button>
                     </div>
+                    <button type="button" class="btn btn-sm" onclick="shareTeacherPortalOnWhatsApp()" style="background: #25D366; color: white; border: none; font-weight: 700; width: 100%; margin-top: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; cursor: pointer;">
+                        <span>💬 Share Portal & Blueprints on WhatsApp</span>
+                    </button>
                 </div>
 
                 <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #92400e; margin-top: 10px;">
@@ -1003,6 +1136,78 @@
                 <div style="display: flex; gap: 10px;">
                     <button type="button" class="btn btn-secondary" onclick="closeAssignPapersModal()">Cancel</button>
                     <button type="button" class="btn btn-primary" id="btn-save-assign-papers" onclick="saveTeacherPaperAssignments()">Save Assigned Papers</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: WHATSAPP BLUEPRINT SHARING & PREVIEW -->
+    <div class="modal-overlay" id="whatsapp-share-modal">
+        <div class="modal-content" style="max-width: 650px; max-height: 92vh; overflow-y: auto;">
+            <div class="modal-header" style="background: #f0fdf4; border-bottom: 1px solid #bbf7d0; margin: -24px -24px 20px -24px; padding: 16px 24px; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">💬</span>
+                    <div>
+                        <div class="modal-title" style="color: #166534; font-size: 17px;">Share Blueprint on WhatsApp</div>
+                        <div style="font-size: 12px; color: #15803d;" id="wa-modal-subtitle">Direct message to teacher with interactive submission options</div>
+                    </div>
+                </div>
+                <button class="modal-close-btn" onclick="closeWhatsAppShareModal()">✕</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 160px; gap: 16px; margin-bottom: 16px; align-items: center;">
+                <div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label class="form-label">Teacher Recipient Phone *</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="wa-teacher-phone" class="form-input" placeholder="e.g. 9876543210 or +919876543210" style="font-weight: 600;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="updateTeacherPhoneFromWhatsAppModal()" title="Save updated phone to teacher record">💾 Save</button>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 12.5px; color: var(--text-muted);">
+                        👨‍🏫 <strong>Teacher:</strong> <span id="wa-teacher-name" style="color: #0f172a; font-weight: 700;">-</span>
+                    </div>
+                </div>
+
+                <!-- Barcode / QR Code for WhatsApp Quick Connect -->
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px;">
+                    <img id="wa-qr-img" src="" alt="WhatsApp QR Code" style="width: 110px; height: 110px; border-radius: 6px; background: white; border: 1px solid #e2e8f0;">
+                    <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 4px; font-weight: 600;">
+                        Scan with Phone
+                    </div>
+                </div>
+            </div>
+
+            <!-- WhatsApp Chat Message Preview -->
+            <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label class="form-label" style="margin-bottom: 0;">WhatsApp Message Preview</label>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="copyWhatsAppMessageText()" style="font-size: 11px; padding: 2px 8px;">📋 Copy Text</button>
+                </div>
+                <div id="wa-preview-box" style="background: #e5ddd5; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; max-height: 250px; overflow-y: auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #111b21;">
+                    <div style="background: #ffffff; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 1.5px rgba(11,20,26,0.13); white-space: pre-wrap;" id="wa-bubble-content">
+                        Loading blueprint preview...
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin-top: 12px; font-size: 12px; color: #166534; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">🤖</span>
+                <div>
+                    <strong>Two-Way Question Collection:</strong> Teacher can click the 1-tap mobile portal link, OR reply directly in WhatsApp chat to add questions according to this blueprint!
+                </div>
+            </div>
+
+            <div style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary" onclick="closeWhatsAppShareModal()">Close</button>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-sm" id="btn-send-wa-bot" onclick="sendBlueprintViaWhatsAppBot()" style="background: #0284c7; color: white; border: none; font-weight: 700; padding: 8px 14px; cursor: pointer; border-radius: 6px;">
+                        ⚡ Send via Bot API
+                    </button>
+                    <a id="btn-open-wa-me" href="#" target="_blank" class="btn btn-sm" style="background: #25D366; color: white; border: none; font-weight: 700; padding: 8px 16px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; cursor: pointer;">
+                        <span>🟢 Open in WhatsApp (1-Click)</span>
+                    </a>
                 </div>
             </div>
         </div>

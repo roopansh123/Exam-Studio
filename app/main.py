@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, Request, Response, Form, UploadFile, File, HTTPException, Depends
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,6 +19,7 @@ from .database import get_db, init_db, UPLOADS_DIR, DB_PATH
 from .utils import get_local_ip, generate_qr_code
 from .docx_generator import generate_docx
 from .tunnel_manager import TunnelManager
+from .whatsapp_bot import WhatsAppBotManager
 
 # Initialize DB
 init_db()
@@ -80,6 +81,20 @@ class WifiSettingsUpdate(BaseModel):
 
 class TunnelStartRequest(BaseModel):
     subdomain: Optional[str] = None
+
+class WhatsAppSettingsUpdate(BaseModel):
+    whatsapp_enabled: bool = False
+    whatsapp_mode: str = "hybrid"  # 'hybrid', 'cloud_api', 'qr_link', 'direct'
+    whatsapp_bot_phone: Optional[str] = ""
+    whatsapp_phone_number_id: Optional[str] = ""
+    whatsapp_access_token: Optional[str] = ""
+    whatsapp_verify_token: Optional[str] = "lkcs_exam_studio_verify_token"
+    whatsapp_business_account_id: Optional[str] = ""
+    whatsapp_welcome_message: Optional[str] = ""
+
+class WhatsAppTestMessageRequest(BaseModel):
+    to_phone: str
+    message: Optional[str] = None
 
 class GenerateLinkRequest(BaseModel):
     validity_hours: float = 24.0
@@ -401,6 +416,202 @@ async def stop_tunnel():
 async def get_tunnel_status():
     mgr = TunnelManager.get_instance()
     return mgr.get_status()
+
+# --- WhatsApp Bot & Integration Endpoints ---
+@app.get("/api/whatsapp/settings")
+async def get_whatsapp_settings():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT whatsapp_enabled, whatsapp_mode, whatsapp_bot_phone, 
+               whatsapp_phone_number_id, whatsapp_access_token, whatsapp_verify_token,
+               whatsapp_business_account_id, whatsapp_welcome_message,
+               whatsapp_session_connected, public_url, school_name
+        FROM school_settings WHERE id = 1
+    """)
+    row = dict(cursor.fetchone() or {})
+    conn.close()
+
+    tunnel_mgr = TunnelManager.get_instance()
+    tunnel_status = tunnel_mgr.get_status()
+    effective_public = tunnel_status.get('url') or row.get('public_url') or 'http://localhost:8000'
+    effective_public = effective_public.rstrip('/')
+
+    webhook_url = f"{effective_public}/api/whatsapp/webhook"
+    
+    bot_mgr = WhatsAppBotManager.get_instance()
+    bot_phone = row.get("whatsapp_bot_phone", "")
+    target_qr_text = f"https://wa.me/{bot_phone}?text=Hi" if bot_phone else webhook_url
+    bot_qr = bot_mgr.generate_qr_code_base64(target_qr_text)
+
+    token = row.get("whatsapp_access_token") or ""
+    masked_token = (token[:6] + "..." + token[-4:]) if len(token) > 12 else token
+
+    return {
+        "whatsapp_enabled": bool(row.get("whatsapp_enabled", 0)),
+        "whatsapp_mode": row.get("whatsapp_mode") or "hybrid",
+        "whatsapp_bot_phone": bot_phone,
+        "whatsapp_phone_number_id": row.get("whatsapp_phone_number_id") or "",
+        "whatsapp_access_token": token,
+        "whatsapp_access_token_masked": masked_token,
+        "whatsapp_verify_token": row.get("whatsapp_verify_token") or "lkcs_exam_studio_verify_token",
+        "whatsapp_business_account_id": row.get("whatsapp_business_account_id") or "",
+        "whatsapp_welcome_message": row.get("whatsapp_welcome_message") or "",
+        "whatsapp_session_connected": bool(row.get("whatsapp_session_connected", 0)),
+        "webhook_url": webhook_url,
+        "is_tunnel_running": tunnel_status.get('status') == 'running',
+        "bot_qr_code": bot_qr
+    }
+
+@app.post("/api/whatsapp/settings")
+async def update_whatsapp_settings(settings: WhatsAppSettingsUpdate):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE school_settings
+        SET whatsapp_enabled = ?, whatsapp_mode = ?, whatsapp_bot_phone = ?,
+            whatsapp_phone_number_id = ?, whatsapp_access_token = ?,
+            whatsapp_verify_token = ?, whatsapp_business_account_id = ?,
+            whatsapp_welcome_message = ?
+        WHERE id = 1
+    """, (
+        1 if settings.whatsapp_enabled else 0,
+        settings.whatsapp_mode or "hybrid",
+        settings.whatsapp_bot_phone or "",
+        settings.whatsapp_phone_number_id or "",
+        settings.whatsapp_access_token or "",
+        settings.whatsapp_verify_token or "lkcs_exam_studio_verify_token",
+        settings.whatsapp_business_account_id or "",
+        settings.whatsapp_welcome_message or ""
+    ))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "WhatsApp settings updated successfully"}
+
+@app.get("/api/whatsapp/webhook")
+async def verify_whatsapp_webhook(request: Request):
+    """Meta WhatsApp Cloud API Webhook Verification."""
+    mode = request.query_params.get("hub.mode")
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT whatsapp_verify_token FROM school_settings WHERE id = 1")
+    row = cursor.fetchone()
+    conn.close()
+
+    expected_token = row["whatsapp_verify_token"] if row and row["whatsapp_verify_token"] else "lkcs_exam_studio_verify_token"
+
+    if mode == "subscribe" and token == expected_token:
+        return Response(content=challenge, media_type="text/plain", status_code=200)
+
+    raise HTTPException(status_code=403, detail="Verification token mismatch")
+
+@app.post("/api/whatsapp/webhook")
+async def handle_whatsapp_webhook(request: Request):
+    """Handles incoming WhatsApp messages from Meta Cloud API or custom webhooks."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    bot_mgr = WhatsAppBotManager.get_instance()
+
+    # Meta WhatsApp Cloud API structure
+    if "entry" in body:
+        entries = body.get("entry", [])
+        for entry in entries:
+            for change in entry.get("changes", []):
+                val = change.get("value", {})
+                for msg in val.get("messages", []):
+                    sender = msg.get("from")
+                    msg_text = ""
+                    if msg.get("type") == "text":
+                        msg_text = msg.get("text", {}).get("body", "")
+                    elif msg.get("type") == "button":
+                        msg_text = msg.get("button", {}).get("text", "")
+                    elif msg.get("type") == "interactive":
+                        msg_text = msg.get("interactive", {}).get("button_reply", {}).get("title", "")
+
+                    if sender and msg_text:
+                        reply = bot_mgr.handle_incoming_message(sender, msg_text)
+                        bot_mgr.send_meta_whatsapp_message(sender, reply)
+        return {"status": "success"}
+
+    # Generic / Custom Gateway structure
+    sender = body.get("from") or body.get("sender") or body.get("phone")
+    text = body.get("message") or body.get("text") or body.get("body")
+    if sender and text:
+        reply = bot_mgr.handle_incoming_message(sender, text)
+        return {"status": "success", "reply": reply}
+
+    return {"status": "ignored"}
+
+@app.get("/api/whatsapp/share-blueprint/{blueprint_id}")
+async def get_blueprint_whatsapp_share(blueprint_id: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT public_url FROM school_settings WHERE id = 1")
+    s_row = cursor.fetchone()
+    conn.close()
+
+    tunnel_mgr = TunnelManager.get_instance()
+    tunnel_status = tunnel_mgr.get_status()
+    base_url = tunnel_status.get('url') or (s_row['public_url'] if s_row else '') or 'http://localhost:8000'
+
+    bot_mgr = WhatsAppBotManager.get_instance()
+    msg_text, meta = bot_mgr.format_blueprint_message(blueprint_id, base_url=base_url)
+
+    teacher_phone = meta.get("teacher", {}).get("phone") if meta and meta.get("teacher") else ""
+    teacher_name = meta.get("teacher", {}).get("name") if meta and meta.get("teacher") else ""
+
+    wa_me_url = bot_mgr.generate_wa_me_link(teacher_phone, msg_text)
+    qr_target = f"https://wa.me/{teacher_phone}?text=BLUEPRINT" if teacher_phone else (meta.get("portal_url") if meta else wa_me_url)
+    qr_code = bot_mgr.generate_qr_code_base64(qr_target)
+
+    return {
+        "blueprint_id": blueprint_id,
+        "teacher_name": teacher_name,
+        "teacher_phone": teacher_phone,
+        "message": msg_text,
+        "wa_me_url": wa_me_url,
+        "qr_code": qr_code
+    }
+
+@app.post("/api/whatsapp/send-blueprint/{blueprint_id}")
+async def send_blueprint_whatsapp(blueprint_id: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT public_url FROM school_settings WHERE id = 1")
+    s_row = cursor.fetchone()
+    conn.close()
+
+    tunnel_mgr = TunnelManager.get_instance()
+    tunnel_status = tunnel_mgr.get_status()
+    base_url = tunnel_status.get('url') or (s_row['public_url'] if s_row else '') or 'http://localhost:8000'
+
+    bot_mgr = WhatsAppBotManager.get_instance()
+    msg_text, meta = bot_mgr.format_blueprint_message(blueprint_id, base_url=base_url)
+
+    teacher = meta.get("teacher") if meta else None
+    if not teacher or not teacher.get("phone"):
+        raise HTTPException(status_code=400, detail="Assigned teacher does not have a phone number registered.")
+
+    res = bot_mgr.send_meta_whatsapp_message(teacher["phone"], msg_text)
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res.get("error", "Failed to send WhatsApp message via Meta Cloud API."))
+
+    return {"status": "success", "message": f"Blueprint successfully sent to {teacher['name']} ({teacher['phone']}) on WhatsApp!"}
+
+@app.post("/api/whatsapp/test-message")
+async def send_test_whatsapp_message(req: WhatsAppTestMessageRequest):
+    bot_mgr = WhatsAppBotManager.get_instance()
+    test_text = req.message or "Hello from Lord Krishna Convent School Exam Studio! WhatsApp Bot connection verified successfully. ✅"
+    res = bot_mgr.send_meta_whatsapp_message(req.to_phone, test_text)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Failed to deliver test message."))
+    return {"status": "success", "message": f"Test message delivered successfully to {req.to_phone}!"}
 
 # --- Admin Authentication ---
 @app.post("/api/admin/login")
