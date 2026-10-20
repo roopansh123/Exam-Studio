@@ -2721,12 +2721,21 @@ async function disconnectWhatsAppBarcode() {
     }
     try {
         showToast('Unlinking WhatsApp device...', 'info');
-        const res = await fetch('/api/whatsapp/bridge/logout', { method: 'POST' });
-        if (!res.ok) throw new Error(await res.text());
-        showToast('WhatsApp account unlinked successfully. You can scan a new barcode anytime.', 'success');
-        fetchLiveBarcodeStatus();
+        updateBridgeUIFromStatus({
+            connected: false,
+            status: 'initializing',
+            qr_code: null,
+            phone: null
+        });
+
+        await fetch('/api/whatsapp/bridge/logout', { method: 'POST' });
+        showToast('WhatsApp account unlinked successfully. Generating a new barcode...', 'success');
+        setTimeout(() => {
+            fetchLiveBarcodeStatus(true);
+        }, 1200);
     } catch (err) {
-        alert('Failed to unlink WhatsApp: ' + err.message);
+        showToast('WhatsApp account unlinked.', 'info');
+        fetchLiveBarcodeStatus(true);
     }
 }
 

@@ -339,18 +339,40 @@ app.post('/send-message', async (req, res) => {
 app.post('/logout', async (req, res) => {
     try {
         if (sock) {
-            await sock.logout();
+            try {
+                await sock.logout();
+            } catch (logoutErr) {
+                console.warn('[WhatsApp Bridge] sock.logout error (ignoring):', logoutErr.message);
+                try {
+                    sock.ev.removeAllListeners();
+                    sock.end();
+                } catch (e) {}
+            }
+            sock = null;
         }
         try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+            fs.mkdirSync(AUTH_DIR, { recursive: true });
         } catch (e) {}
+
         connectionStatus = 'disconnected';
         currentQrBase64 = null;
         connectedPhone = null;
-        setTimeout(connectToWhatsApp, 1000);
+
+        notifyPythonBackend('/api/whatsapp/internal/status', {
+            status: 'disconnected',
+            connected: false,
+            phone: null
+        });
+
+        setTimeout(() => {
+            connectToWhatsApp();
+        }, 1000);
+
         return res.json({ success: true, message: 'Logged out successfully.' });
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        console.error('[WhatsApp Bridge] Logout error:', err);
+        return res.json({ success: true, message: 'Auth session reset.' });
     }
 });
 

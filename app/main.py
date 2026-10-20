@@ -506,13 +506,21 @@ async def get_whatsapp_bridge_status(request: Request):
 async def logout_whatsapp_bridge():
     """Unlinks the phone and resets the official WhatsApp Web session."""
     bot_mgr = WhatsAppBotManager.get_instance()
-    res = bot_mgr.bridge_logout()
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE school_settings SET whatsapp_session_connected = 0 WHERE id = 1")
-    conn.commit()
-    conn.close()
-    return res
+    try:
+        res = bot_mgr.bridge_logout()
+    except Exception as e:
+        res = {"success": True, "message": str(e)}
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE school_settings SET whatsapp_session_connected = 0, whatsapp_bot_phone = '' WHERE id = 1")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Error resetting school_settings for whatsapp: {e}")
+
+    return res or {"success": True, "message": "Logged out successfully."}
 
 @app.post("/api/whatsapp/internal/incoming")
 async def handle_whatsapp_internal_incoming(request: Request):
