@@ -52,3 +52,7 @@ scratch/
 app/bin/*
 !app/bin/.gitkeep
 
+# WhatsApp Bridge dependencies & auth credentials
+app/whatsapp_bridge/node_modules/
+app/whatsapp_bridge/auth_info/
+node_modules/

@@ -548,6 +548,7 @@ function switchTab(tabId) {
     if (tabId === 'tab-papers') loadBlueprints();
     if (tabId === 'tab-teachers') loadTeachers();
     if (tabId === 'tab-settings') { loadSchoolSettings(); loadWhatsAppSettings(); }
+    else { if (typeof stopWaBarcodePolling === 'function') stopWaBarcodePolling(); }
 }
 
 function setRole(role) {
@@ -2579,13 +2580,15 @@ function initEventListeners() {
 }
 
 // ==========================================
-// 💬 WhatsApp Bot & Sharing Integration
+// 💬 WhatsApp Bot & Barcode Sharing Integration
 // ==========================================
 
 let whatsAppSettings = {};
 let currentWhatsAppBlueprintId = null;
 let currentWhatsAppTeacherId = null;
 let currentWhatsAppMessageText = '';
+let waBarcodePollTimer = null;
+let waBridgeState = { connected: false, phone: '', qr_code: '', status: 'offline' };
 
 async function loadWhatsAppSettings() {
     try {
@@ -2597,7 +2600,7 @@ async function loadWhatsAppSettings() {
         if (enabledSelect) enabledSelect.value = whatsAppSettings.whatsapp_enabled ? '1' : '0';
 
         const modeSelect = document.getElementById('wa-setting-mode');
-        if (modeSelect) modeSelect.value = whatsAppSettings.whatsapp_mode || 'hybrid';
+        if (modeSelect) modeSelect.value = whatsAppSettings.whatsapp_mode || 'barcode';
 
         const botPhone = document.getElementById('wa-setting-bot-phone');
         if (botPhone) botPhone.value = whatsAppSettings.whatsapp_bot_phone || '';
@@ -2614,23 +2617,9 @@ async function loadWhatsAppSettings() {
         const webhookUrlInput = document.getElementById('wa-setting-webhook-url');
         if (webhookUrlInput) webhookUrlInput.value = whatsAppSettings.webhook_url || '';
 
-        const qrImg = document.getElementById('wa-setup-qr-img');
-        if (qrImg && whatsAppSettings.bot_qr_code) qrImg.src = whatsAppSettings.bot_qr_code;
-
-        // Connection badge
-        const badge = document.getElementById('wa-connection-badge');
-        if (badge) {
-            if (whatsAppSettings.whatsapp_enabled) {
-                badge.innerText = '🟢 Active & Ready';
-                badge.style.background = '#dcfce7';
-                badge.style.color = '#15803d';
-                badge.style.borderColor = '#86efac';
-            } else {
-                badge.innerText = '⚪ Disabled';
-                badge.style.background = '#f1f5f9';
-                badge.style.color = '#64748b';
-                badge.style.borderColor = '#cbd5e1';
-            }
+        // If bridge status provided in initial settings, update state
+        if (whatsAppSettings.bridge) {
+            updateBridgeUIFromStatus(whatsAppSettings.bridge);
         }
 
         toggleWhatsAppModeUI();
@@ -2639,13 +2628,122 @@ async function loadWhatsAppSettings() {
     }
 }
 
+function updateBridgeUIFromStatus(status) {
+    if (!status) return;
+    waBridgeState = status;
+    const scanBox = document.getElementById('wa-barcode-scan-box');
+    const connectedBox = document.getElementById('wa-barcode-connected-box');
+    const qrImg = document.getElementById('wa-barcode-img');
+    const spinner = document.getElementById('wa-barcode-spinner');
+    const indicator = document.getElementById('wa-barcode-indicator');
+    const phoneDisplay = document.getElementById('wa-connected-phone-display');
+    const badge = document.getElementById('wa-connection-badge');
+
+    if (status.connected) {
+        if (scanBox) scanBox.style.display = 'none';
+        if (connectedBox) connectedBox.style.display = 'block';
+        if (phoneDisplay) {
+            const cleanPhone = status.phone ? `+${status.phone}` : 'Connected';
+            phoneDisplay.innerText = `Linked Account: ${cleanPhone}`;
+        }
+        if (badge) {
+            badge.innerText = `🟢 Linked to WhatsApp (+${status.phone || 'Ready'})`;
+            badge.style.background = '#dcfce7';
+            badge.style.color = '#15803d';
+            badge.style.borderColor = '#86efac';
+        }
+    } else {
+        if (scanBox) scanBox.style.display = 'grid';
+        if (connectedBox) connectedBox.style.display = 'none';
+
+        if (status.qr_code) {
+            if (qrImg) {
+                qrImg.src = status.qr_code;
+                qrImg.style.display = 'block';
+            }
+            if (spinner) spinner.style.display = 'none';
+            if (indicator) indicator.style.display = 'flex';
+
+            if (badge) {
+                badge.innerText = '🟡 Barcode Ready - Scan with Phone';
+                badge.style.background = '#fef3c7';
+                badge.style.color = '#b45309';
+                badge.style.borderColor = '#fde68a';
+            }
+        } else {
+            if (qrImg) qrImg.style.display = 'none';
+            if (spinner) spinner.style.display = 'flex';
+            if (indicator) indicator.style.display = 'none';
+
+            if (badge) {
+                badge.innerText = '🔄 Initializing Barcode...';
+                badge.style.background = '#e0f2fe';
+                badge.style.color = '#0369a1';
+                badge.style.borderColor = '#bae6fd';
+            }
+        }
+    }
+}
+
+async function fetchLiveBarcodeStatus(forceRefresh = false) {
+    try {
+        const res = await fetch('/api/whatsapp/bridge/status');
+        if (!res.ok) return;
+        const status = await res.json();
+        updateBridgeUIFromStatus(status);
+        if (forceRefresh && status.qr_code) {
+            showToast('WhatsApp Barcode refreshed live!', 'success');
+        }
+    } catch (e) {
+        console.warn('Barcode status polling error:', e);
+    }
+}
+
+function startWaBarcodePolling() {
+    stopWaBarcodePolling();
+    fetchLiveBarcodeStatus();
+    waBarcodePollTimer = setInterval(fetchLiveBarcodeStatus, 2500);
+}
+
+function stopWaBarcodePolling() {
+    if (waBarcodePollTimer) {
+        clearInterval(waBarcodePollTimer);
+        waBarcodePollTimer = null;
+    }
+}
+
+async function disconnectWhatsAppBarcode() {
+    if (!confirm('Are you sure you want to unlink this WhatsApp account? The bot will not be able to send or receive messages until a device is linked again.')) {
+        return;
+    }
+    try {
+        showToast('Unlinking WhatsApp device...', 'info');
+        const res = await fetch('/api/whatsapp/bridge/logout', { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        showToast('WhatsApp account unlinked successfully. You can scan a new barcode anytime.', 'success');
+        fetchLiveBarcodeStatus();
+    } catch (err) {
+        alert('Failed to unlink WhatsApp: ' + err.message);
+    }
+}
+
 function toggleWhatsAppModeUI() {
     const modeSelect = document.getElementById('wa-setting-mode');
+    const barcodePanel = document.getElementById('wa-barcode-panel');
+    const directPanel = document.getElementById('wa-direct-panel');
     const cloudPanel = document.getElementById('wa-cloud-api-panel');
-    if (!modeSelect || !cloudPanel) return;
+    if (!modeSelect) return;
 
     const mode = modeSelect.value;
-    cloudPanel.style.display = (mode === 'direct') ? 'none' : 'block';
+    if (barcodePanel) barcodePanel.style.display = (mode === 'barcode') ? 'block' : 'none';
+    if (directPanel) directPanel.style.display = (mode === 'direct') ? 'block' : 'none';
+    if (cloudPanel) cloudPanel.style.display = (mode === 'cloud_api') ? 'block' : 'none';
+
+    if (mode === 'barcode') {
+        startWaBarcodePolling();
+    } else {
+        stopWaBarcodePolling();
+    }
 }
 
 function toggleTokenVisibility() {
@@ -2669,7 +2767,7 @@ async function handleSaveWhatsAppSettings(e) {
 
     const payload = {
         whatsapp_enabled: document.getElementById('wa-setting-enabled')?.value === '1',
-        whatsapp_mode: document.getElementById('wa-setting-mode')?.value || 'hybrid',
+        whatsapp_mode: document.getElementById('wa-setting-mode')?.value || 'barcode',
         whatsapp_bot_phone: document.getElementById('wa-setting-bot-phone')?.value.trim() || '',
         whatsapp_phone_number_id: document.getElementById('wa-setting-phone-id')?.value.trim() || '',
         whatsapp_access_token: document.getElementById('wa-setting-access-token')?.value.trim() || '',
@@ -2685,7 +2783,7 @@ async function handleSaveWhatsAppSettings(e) {
             body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error(await res.text());
-        showToast('WhatsApp Bot & API configuration saved successfully!', 'success');
+        showToast('WhatsApp configuration saved successfully!', 'success');
         await loadWhatsAppSettings();
     } catch (err) {
         alert('Failed to save WhatsApp settings: ' + err.message);
@@ -2697,12 +2795,12 @@ async function handleSaveWhatsAppSettings(e) {
 async function sendTestWhatsAppMessage() {
     const phoneInput = document.getElementById('wa-test-phone');
     if (!phoneInput || !phoneInput.value.trim()) {
-        alert('Please enter a recipient phone number with country code (e.g. 9876543210)');
+        alert('Please enter a recipient phone number (e.g. 9876543210)');
         return;
     }
 
     try {
-        showToast('Sending test WhatsApp message...', 'info');
+        showToast('Sending live test WhatsApp message...', 'info');
         const res = await fetch('/api/whatsapp/test-message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2717,12 +2815,12 @@ async function sendTestWhatsAppMessage() {
 }
 
 function openTestChatWithBot() {
-    const botPhone = document.getElementById('wa-setting-bot-phone')?.value.trim() || whatsAppSettings.whatsapp_bot_phone;
-    if (botPhone) {
-        const clean = botPhone.replace(/\D/g, '');
+    const phone = waBridgeState.phone || document.getElementById('wa-setting-bot-phone')?.value.trim() || whatsAppSettings.whatsapp_bot_phone;
+    if (phone) {
+        const clean = phone.replace(/\D/g, '');
         window.open(`https://wa.me/${clean}?text=Hi`, '_blank');
     } else {
-        alert('Please enter and save the School Bot Phone Number first.');
+        alert('Please link WhatsApp via Barcode or enter the Bot Phone Number first.');
     }
 }
 
@@ -2757,10 +2855,25 @@ async function openWhatsAppShareModal(blueprintId) {
         const openBtn = document.getElementById('btn-open-wa-me');
         if (openBtn) openBtn.href = data.wa_me_url || '#';
 
-        // Update send via bot button visibility based on Cloud API settings
+        // Update send via bot button visibility & text based on connection
         const botBtn = document.getElementById('btn-send-wa-bot');
         if (botBtn) {
-            botBtn.style.display = (whatsAppSettings.whatsapp_access_token && whatsAppSettings.whatsapp_phone_number_id) ? 'inline-block' : 'none';
+            const isLinked = Boolean(data.bridge_connected || waBridgeState.connected);
+            const hasCloudApi = Boolean(whatsAppSettings.whatsapp_access_token && whatsAppSettings.whatsapp_phone_number_id);
+
+            if (isLinked) {
+                botBtn.innerHTML = '<span>🚀 Send via Linked WhatsApp</span>';
+                botBtn.style.background = '#16a34a';
+                botBtn.style.display = 'inline-flex';
+                botBtn.title = 'Sends directly from your linked school WhatsApp account in background';
+            } else if (hasCloudApi) {
+                botBtn.innerHTML = '<span>⚡ Send via Meta Cloud API</span>';
+                botBtn.style.background = '#0284c7';
+                botBtn.style.display = 'inline-flex';
+                botBtn.title = 'Sends via official Meta Cloud API';
+            } else {
+                botBtn.style.display = 'none';
+            }
         }
     } catch (err) {
         document.getElementById('wa-bubble-content').innerText = 'Failed to load blueprint details: ' + err.message;
@@ -2817,15 +2930,15 @@ async function sendBlueprintViaWhatsAppBot() {
     if (btn) btn.disabled = true;
 
     try {
-        showToast('Dispatching blueprint via Meta WhatsApp Bot...', 'info');
+        showToast('Dispatching blueprint on WhatsApp...', 'info');
         const res = await fetch(`/api/whatsapp/send-blueprint/${currentWhatsAppBlueprintId}`, {
             method: 'POST'
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Dispatch failed');
-        showToast(data.message || 'Blueprint sent to teacher on WhatsApp!', 'success');
+        showToast(data.message || 'Blueprint delivered to teacher on WhatsApp!', 'success');
     } catch (err) {
-        alert('WhatsApp Bot Send Error: ' + err.message);
+        alert('WhatsApp Dispatch Error: ' + err.message);
     } finally {
         if (btn) btn.disabled = false;
     }

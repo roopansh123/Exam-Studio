@@ -1,3 +1,9 @@
+import os
+import sys
+import shutil
+import subprocess
+import time
+import socket
 import re
 import json
 import urllib.parse
@@ -53,6 +59,180 @@ class WhatsAppBotManager:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+
+    def __init__(self):
+        self._bridge_proc = None
+        self._bridge_port = 3001
+        self._bridge_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "whatsapp_bridge")
+
+    def is_bridge_port_open(self) -> bool:
+        """Checks if bridge HTTP port 3001 is listening."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                return s.connect_ex(("127.0.0.1", self._bridge_port)) == 0
+        except Exception:
+            return False
+
+    def ensure_bridge_running(self, python_port: int = 8000) -> bool:
+        """Starts the Baileys Node.js microservice if not already running."""
+        # 1. If already listening, configure python port and return True
+        if self.is_bridge_port_open():
+            self._configure_bridge_python_port(python_port)
+            return True
+
+        # 2. Check if node is installed
+        node_bin = shutil.which("node")
+        if not node_bin:
+            logger.warning("Node.js is not found in PATH. WhatsApp Barcode bridge cannot start automatically.")
+            return False
+
+        server_script = os.path.join(self._bridge_dir, "server.js")
+        if not os.path.exists(server_script):
+            logger.error(f"WhatsApp bridge server script missing: {server_script}")
+            return False
+
+        env = os.environ.copy()
+        env["WA_BRIDGE_PORT"] = str(self._bridge_port)
+        env["PYTHON_PORT"] = str(python_port)
+
+        try:
+            logger.info("Spawning WhatsApp Baileys Barcode Bridge microservice...")
+            self._bridge_proc = subprocess.Popen(
+                [node_bin, server_script],
+                cwd=self._bridge_dir,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            # Wait up to 4 seconds for port 3001 to open
+            for _ in range(20):
+                time.sleep(0.2)
+                if self.is_bridge_port_open():
+                    logger.info("WhatsApp Barcode Bridge microservice started and listening on port 3001.")
+                    self._configure_bridge_python_port(python_port)
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to start WhatsApp bridge process: {e}")
+            return False
+
+    def _configure_bridge_python_port(self, python_port: int):
+        """Notifies the Node bridge of the active Python port for incoming messages."""
+        try:
+            payload = json.dumps({"python_port": python_port}).encode("utf-8")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{self._bridge_port}/configure",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                pass
+        except Exception:
+            pass
+
+    def get_bridge_status(self) -> Dict[str, Any]:
+        """Queries the live connection and barcode status from the Node bridge."""
+        if not self.is_bridge_port_open():
+            return {
+                "available": False,
+                "status": "offline",
+                "connected": False,
+                "qr_code": None,
+                "phone": None
+            }
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{self._bridge_port}/status", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return {
+                    "available": True,
+                    "status": data.get("status", "unknown"),
+                    "connected": bool(data.get("connected", False)),
+                    "qr_code": data.get("qr_code"),
+                    "phone": data.get("phone")
+                }
+        except Exception as e:
+            return {
+                "available": False,
+                "status": "error",
+                "connected": False,
+                "qr_code": None,
+                "phone": None,
+                "error": str(e)
+            }
+
+    def send_bridge_whatsapp_message(self, to_phone: str, message_text: str) -> Dict[str, Any]:
+        """Sends an outgoing message via the linked WhatsApp Web session."""
+        clean_phone = sanitize_phone(to_phone)
+        if not clean_phone:
+            return {"success": False, "error": "Invalid recipient phone number."}
+
+        if not self.is_bridge_port_open():
+            return {"success": False, "error": "WhatsApp Barcode bridge is offline. Please scan the barcode first."}
+
+        try:
+            payload = json.dumps({"phone": clean_phone, "message": message_text}).encode("utf-8")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{self._bridge_port}/send-message",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8")
+            try:
+                err_json = json.loads(err_body)
+                return {"success": False, "error": err_json.get("error", err_body)}
+            except Exception:
+                return {"success": False, "error": err_body}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def bridge_logout(self) -> Dict[str, Any]:
+        """Unlinks the device and resets the WhatsApp session."""
+        if not self.is_bridge_port_open():
+            return {"success": True, "message": "Bridge is offline."}
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{self._bridge_port}/logout",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def send_message_smart(self, to_phone: str, message_text: str) -> Dict[str, Any]:
+        """Sends message via linked WhatsApp Barcode session if connected, or Meta Cloud API if configured."""
+        bridge_status = self.get_bridge_status()
+        if bridge_status.get("connected"):
+            res = self.send_bridge_whatsapp_message(to_phone, message_text)
+            if res.get("success"):
+                res["channel"] = "linked_device"
+                return res
+
+        # Fallback to Meta Cloud API if configured
+        settings = get_school_and_whatsapp_settings()
+        if settings.get("whatsapp_access_token") and settings.get("whatsapp_phone_number_id"):
+            res = self.send_meta_whatsapp_message(to_phone, message_text)
+            if res.get("success"):
+                res["channel"] = "cloud_api"
+                return res
+            return res
+
+        if not bridge_status.get("connected"):
+            return {
+                "success": False,
+                "error": "WhatsApp is not connected. Please scan the official WhatsApp Barcode in Settings to connect your phone."
+            }
+        return {"success": False, "error": "Unable to deliver WhatsApp message."}
 
     # -------------------------------------------------------------
     # 1. Blueprint Formatting & Sharing

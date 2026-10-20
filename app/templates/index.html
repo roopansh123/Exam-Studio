@@ -612,15 +612,15 @@
                 <div class="form-section-title" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border-bottom: 2px solid #22c55e; padding-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 20px;">💬</span>
-                        <span style="color: #166534; font-weight: 800;">WhatsApp Bot & Automatic Question Collection Setup</span>
+                        <span style="color: #166534; font-weight: 800;">Official WhatsApp Barcode & Multi-Device Bot Setup</span>
                     </div>
-                    <div id="wa-connection-badge" style="font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 20px; background: #dcfce7; color: #15803d; border: 1px solid #86efac;">
-                        🟢 Hybrid Mode Ready
+                    <div id="wa-connection-badge" style="font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 20px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;">
+                        🟡 Initializing WhatsApp Barcode...
                     </div>
                 </div>
 
                 <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 10px; margin-bottom: 16px; line-height: 1.5;">
-                    Share question paper blueprints directly to teachers' WhatsApp chats. Teachers can either tap the 1-click mobile portal link or reply directly in WhatsApp to submit questions according to the blueprint.
+                    Connect your school's WhatsApp account in seconds using WhatsApp's official <strong>Linked Devices Barcode</strong>. Teachers can receive paper blueprints and submit questions conversationally 24/7.
                 </p>
 
                 <form id="whatsapp-settings-form" onsubmit="handleSaveWhatsAppSettings(event)">
@@ -637,40 +637,100 @@
                             <div class="form-group" style="flex: 1.5;">
                                 <label class="form-label">Integration & Connection Mode</label>
                                 <select id="wa-setting-mode" class="form-select" onchange="toggleWhatsAppModeUI()">
-                                    <option value="hybrid" selected>Hybrid: 1-Click WhatsApp Direct + Meta Cloud Bot</option>
-                                    <option value="cloud_api">Meta WhatsApp Cloud API (Official Webhook Bot)</option>
-                                    <option value="direct">1-Click WhatsApp Direct Sharing (Zero Setup / Free)</option>
+                                    <option value="barcode" selected>📱 WhatsApp Web Barcode (Linked Device - Easiest & Free)</option>
+                                    <option value="direct">⚡ 1-Click WhatsApp Direct (Zero Setup / Instant Links)</option>
+                                    <option value="cloud_api">☁️ Meta WhatsApp Cloud API (Enterprise Webhook Bot)</option>
                                 </select>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Barcode / QR Code Quick Scan Card -->
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 20px; display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: center;">
-                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; padding: 10px; border-radius: 10px; border: 1px solid #86efac; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                            <img id="wa-setup-qr-img" src="" alt="WhatsApp Connection QR Code" style="width: 120px; height: 120px; border-radius: 4px;">
-                            <span style="font-size: 10px; font-weight: 700; color: #166534; margin-top: 6px; text-transform: uppercase;">Scan Barcode</span>
-                        </div>
-                        <div>
-                            <div style="font-size: 14px; font-weight: 800; color: #166534; margin-bottom: 4px;">
-                                📱 Connect via Phone Barcode / QR Scan
+                    <!-- 1. OFFICIAL WHATSAPP BARCODE LINKED DEVICE PANEL -->
+                    <div id="wa-barcode-panel" style="margin-bottom: 20px;">
+                        <!-- Active Scanning Box (when not connected) -->
+                        <div id="wa-barcode-scan-box" style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: var(--radius-md); padding: 20px; display: grid; grid-template-columns: 210px 1fr; gap: 24px; align-items: center; box-shadow: 0 2px 10px rgba(34, 197, 94, 0.08);">
+                            <div style="position: relative; background: white; padding: 12px; border-radius: 12px; border: 2px solid #22c55e; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px;">
+                                <img id="wa-barcode-img" src="" alt="WhatsApp Official Barcode" style="width: 180px; height: 180px; object-fit: contain; border-radius: 4px; display: none;">
+                                <div id="wa-barcode-spinner" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px 10px;">
+                                    <div class="spinner" style="width: 32px; height: 32px; border: 3px solid #bbf7d0; border-top-color: #16a34a; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                                    <span style="font-size: 11.5px; font-weight: 700; color: #166534; text-align: center;">Generating Official Barcode...</span>
+                                </div>
+                                <div id="wa-barcode-indicator" style="font-size: 10.5px; font-weight: 700; color: #15803d; margin-top: 8px; display: none; align-items: center; gap: 5px;">
+                                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 1.5s infinite;"></span>
+                                    Official Barcode Ready
+                                </div>
                             </div>
-                            <p style="font-size: 12px; color: #15803d; margin-bottom: 10px; line-height: 1.4;">
-                                Scan this barcode with any smartphone camera or WhatsApp scanner to instantly start a chat with the LKCS Exam Studio channel. Teachers can send questions, view blueprints, and check progress 24/7.
-                            </p>
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="loadWhatsAppSettings()" style="font-size: 11px;">
-                                    🔄 Refresh QR Barcode
-                                </button>
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="openTestChatWithBot()" style="font-size: 11px;">
-                                    💬 Open Bot Chat
-                                </button>
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                    <div style="font-size: 16px; font-weight: 800; color: #14532d;">
+                                        📲 Link School WhatsApp Account in 3 Easy Steps
+                                    </div>
+                                    <span style="font-size: 10.5px; font-weight: 800; padding: 2px 8px; background: #dcfce7; color: #166534; border-radius: 12px; border: 1px solid #86efac;">100% FREE</span>
+                                </div>
+                                <p style="font-size: 12.5px; color: #166534; margin-bottom: 12px; line-height: 1.5;">
+                                    No Meta accounts, tokens, or configuration required! Just scan this barcode with the WhatsApp app on your phone:
+                                </p>
+                                <div style="background: white; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px;">
+                                    <div style="font-size: 12px; color: #1e293b; line-height: 1.8;">
+                                        <strong>1.</strong> Open <strong>WhatsApp</strong> on your mobile phone<br>
+                                        <strong>2.</strong> Tap <strong>Settings ⚙️</strong> (iPhone) or <strong>Menu ⋮</strong> (Android) &gt; <strong>Linked Devices</strong><br>
+                                        <strong>3.</strong> Tap <strong>Link a Device</strong> and point your camera at the barcode on the left
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="fetchLiveBarcodeStatus(true)" style="font-size: 11.5px; font-weight: 700;">
+                                        🔄 Reload Barcode
+                                    </button>
+                                    <span style="font-size: 11px; color: #15803d;">
+                                        ⏱ Barcode syncs live and updates automatically
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Connected Status Box (when phone is linked) -->
+                        <div id="wa-barcode-connected-box" style="display: none; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: var(--radius-md); padding: 20px; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);">
+                            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                                <div style="display: flex; align-items: center; gap: 16px;">
+                                    <div style="width: 52px; height: 52px; border-radius: 50%; background: #22c55e; color: white; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; box-shadow: 0 4px 10px rgba(34, 197, 94, 0.35);">
+                                        ✓
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 16px; font-weight: 800; color: #14532d;">
+                                            WhatsApp Successfully Connected & Linked!
+                                        </div>
+                                        <div id="wa-connected-phone-display" style="font-size: 13.5px; font-weight: 700; color: #15803d; margin-top: 3px;">
+                                            Linked Account: +91 XXXXXXXXXX
+                                        </div>
+                                        <div style="font-size: 11.5px; color: #166534; margin-top: 3px;">
+                                            🟢 Direct Blueprint Sharing & 24/7 Teacher Question Auto-Ingestion Active
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="openTestChatWithBot()" style="font-size: 11.5px; font-weight: 700;">
+                                        💬 Open Chat
+                                    </button>
+                                    <button type="button" class="btn btn-sm" onclick="disconnectWhatsAppBarcode()" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; font-size: 11.5px; font-weight: 700;">
+                                        🔌 Unlink / Disconnect
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Meta WhatsApp Cloud API Dynamic Settings -->
-                    <div id="wa-cloud-api-panel">
+                    <!-- 2. DIRECT 1-CLICK SHARING INFO (When in Direct mode) -->
+                    <div id="wa-direct-panel" style="display: none; background: #f8fafc; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px 20px; margin-bottom: 20px;">
+                        <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 6px;">
+                            ⚡ 1-Click WhatsApp Direct Sharing (Zero Setup)
+                        </div>
+                        <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 0;">
+                            Blueprints and teacher portal links are formatted into ready-to-send messages. Clicking "Open in WhatsApp" opens WhatsApp Web or your desktop app with the message pre-filled to the teacher's registered phone number.
+                        </p>
+                    </div>
+
+                    <!-- 3. META WHATSAPP CLOUD API PANEL (When in cloud_api mode) -->
+                    <div id="wa-cloud-api-panel" style="display: none;">
                         <div style="font-size: 13.5px; font-weight: 700; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
                             <span>☁️ Meta WhatsApp Cloud API Dynamic Configuration</span>
                             <span style="font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 1px 8px; border-radius: 10px; font-weight: 700;">Official API</span>
@@ -695,7 +755,7 @@
                             </div>
                         </div>
 
-                        <!-- Webhook URL Display (Automatically generated with tunnel public URL!) -->
+                        <!-- Webhook URL Display -->
                         <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; margin-top: 14px; margin-bottom: 14px;">
                             <div style="font-size: 12.5px; font-weight: 700; color: #1e40af; margin-bottom: 4px;">
                                 📡 Webhook Callback URL (Paste into Meta App Dashboard)
@@ -714,18 +774,21 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Live Message Delivery Test Tool -->
-                        <div style="background: #fdf4ff; border: 1px solid #f0abfc; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px;">
-                            <div style="font-size: 12.5px; font-weight: 700; color: #86198f; margin-bottom: 4px;">
-                                🧪 Test WhatsApp Connection Live
-                            </div>
-                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
-                                <input type="text" id="wa-test-phone" class="form-input" placeholder="Recipient phone (e.g. 9876543210)" style="max-width: 250px;">
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="sendTestWhatsAppMessage()" style="white-space: nowrap; font-weight: 700;">
-                                    🚀 Send Test Message
-                                </button>
-                            </div>
+                    <!-- LIVE MESSAGE DELIVERY TEST TOOL -->
+                    <div style="background: #fdf4ff; border: 1px solid #f0abfc; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px;">
+                        <div style="font-size: 12.5px; font-weight: 700; color: #86198f; margin-bottom: 4px;">
+                            🧪 Test Live WhatsApp Message Delivery
+                        </div>
+                        <p style="font-size: 11.5px; color: #701a75; margin-bottom: 8px;">
+                            Send a verification message to any phone number to confirm live delivery from your linked WhatsApp:
+                        </p>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="wa-test-phone" class="form-input" placeholder="Recipient phone (e.g. 9876543210)" style="max-width: 250px;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="sendTestWhatsAppMessage()" style="white-space: nowrap; font-weight: 700;">
+                                🚀 Send Test Message
+                            </button>
                         </div>
                     </div>
 
@@ -1202,10 +1265,10 @@
             <div style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <button type="button" class="btn btn-secondary" onclick="closeWhatsAppShareModal()">Close</button>
                 <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn btn-sm" id="btn-send-wa-bot" onclick="sendBlueprintViaWhatsAppBot()" style="background: #0284c7; color: white; border: none; font-weight: 700; padding: 8px 14px; cursor: pointer; border-radius: 6px;">
-                        ⚡ Send via Bot API
+                    <button type="button" class="btn btn-sm" id="btn-send-wa-bot" onclick="sendBlueprintViaWhatsAppBot()" style="background: #16a34a; color: white; border: none; font-weight: 700; padding: 8px 16px; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;">
+                        <span>🚀 Send via Linked WhatsApp</span>
                     </button>
-                    <a id="btn-open-wa-me" href="#" target="_blank" class="btn btn-sm" style="background: #25D366; color: white; border: none; font-weight: 700; padding: 8px 16px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; cursor: pointer;">
+                    <a id="btn-open-wa-me" href="#" target="_blank" class="btn btn-sm" style="background: #0284c7; color: white; border: none; font-weight: 700; padding: 8px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; cursor: pointer;">
                         <span>🟢 Open in WhatsApp (1-Click)</span>
                     </a>
                 </div>

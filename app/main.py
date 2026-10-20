@@ -84,7 +84,7 @@ class TunnelStartRequest(BaseModel):
 
 class WhatsAppSettingsUpdate(BaseModel):
     whatsapp_enabled: bool = False
-    whatsapp_mode: str = "hybrid"  # 'hybrid', 'cloud_api', 'qr_link', 'direct'
+    whatsapp_mode: str = "barcode"  # 'barcode', 'hybrid', 'cloud_api', 'direct'
     whatsapp_bot_phone: Optional[str] = ""
     whatsapp_phone_number_id: Optional[str] = ""
     whatsapp_access_token: Optional[str] = ""
@@ -419,7 +419,7 @@ async def get_tunnel_status():
 
 # --- WhatsApp Bot & Integration Endpoints ---
 @app.get("/api/whatsapp/settings")
-async def get_whatsapp_settings():
+async def get_whatsapp_settings(request: Request):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -440,6 +440,10 @@ async def get_whatsapp_settings():
     webhook_url = f"{effective_public}/api/whatsapp/webhook"
     
     bot_mgr = WhatsAppBotManager.get_instance()
+    current_port = request.url.port or 8000
+    bot_mgr.ensure_bridge_running(python_port=current_port)
+    bridge_status = bot_mgr.get_bridge_status()
+
     bot_phone = row.get("whatsapp_bot_phone", "")
     target_qr_text = f"https://wa.me/{bot_phone}?text=Hi" if bot_phone else webhook_url
     bot_qr = bot_mgr.generate_qr_code_base64(target_qr_text)
@@ -449,7 +453,7 @@ async def get_whatsapp_settings():
 
     return {
         "whatsapp_enabled": bool(row.get("whatsapp_enabled", 0)),
-        "whatsapp_mode": row.get("whatsapp_mode") or "hybrid",
+        "whatsapp_mode": row.get("whatsapp_mode") or "barcode",
         "whatsapp_bot_phone": bot_phone,
         "whatsapp_phone_number_id": row.get("whatsapp_phone_number_id") or "",
         "whatsapp_access_token": token,
@@ -457,10 +461,11 @@ async def get_whatsapp_settings():
         "whatsapp_verify_token": row.get("whatsapp_verify_token") or "lkcs_exam_studio_verify_token",
         "whatsapp_business_account_id": row.get("whatsapp_business_account_id") or "",
         "whatsapp_welcome_message": row.get("whatsapp_welcome_message") or "",
-        "whatsapp_session_connected": bool(row.get("whatsapp_session_connected", 0)),
+        "whatsapp_session_connected": bool(row.get("whatsapp_session_connected", 0)) or bridge_status.get("connected", False),
         "webhook_url": webhook_url,
         "is_tunnel_running": tunnel_status.get('status') == 'running',
-        "bot_qr_code": bot_qr
+        "bot_qr_code": bot_qr,
+        "bridge": bridge_status
     }
 
 @app.post("/api/whatsapp/settings")
@@ -476,7 +481,7 @@ async def update_whatsapp_settings(settings: WhatsAppSettingsUpdate):
         WHERE id = 1
     """, (
         1 if settings.whatsapp_enabled else 0,
-        settings.whatsapp_mode or "hybrid",
+        settings.whatsapp_mode or "barcode",
         settings.whatsapp_bot_phone or "",
         settings.whatsapp_phone_number_id or "",
         settings.whatsapp_access_token or "",
@@ -487,6 +492,63 @@ async def update_whatsapp_settings(settings: WhatsAppSettingsUpdate):
     conn.commit()
     conn.close()
     return {"status": "success", "message": "WhatsApp settings updated successfully"}
+
+# --- Live WhatsApp Web Barcode (Linked Device) Endpoints ---
+@app.get("/api/whatsapp/bridge/status")
+async def get_whatsapp_bridge_status(request: Request):
+    """Returns live connection and QR barcode status from the Baileys Node microservice."""
+    bot_mgr = WhatsAppBotManager.get_instance()
+    current_port = request.url.port or 8000
+    bot_mgr.ensure_bridge_running(python_port=current_port)
+    return bot_mgr.get_bridge_status()
+
+@app.post("/api/whatsapp/bridge/logout")
+async def logout_whatsapp_bridge():
+    """Unlinks the phone and resets the official WhatsApp Web session."""
+    bot_mgr = WhatsAppBotManager.get_instance()
+    res = bot_mgr.bridge_logout()
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE school_settings SET whatsapp_session_connected = 0 WHERE id = 1")
+    conn.commit()
+    conn.close()
+    return res
+
+@app.post("/api/whatsapp/internal/incoming")
+async def handle_whatsapp_internal_incoming(request: Request):
+    """Internal webhook called by Baileys microservice when a teacher chats on WhatsApp."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from_phone = body.get("from") or ""
+    text = body.get("text") or ""
+    if not from_phone or not text:
+        return {"status": "ignored", "reply": None}
+
+    bot_mgr = WhatsAppBotManager.get_instance()
+    reply = bot_mgr.handle_incoming_message(from_phone, text)
+    return {"status": "success", "reply": reply}
+
+@app.post("/api/whatsapp/internal/status")
+async def handle_whatsapp_internal_status(request: Request):
+    """Internal webhook called by Baileys microservice on connection state update."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    connected = 1 if body.get("connected") else 0
+    phone = body.get("phone") or ""
+
+    conn = get_db()
+    cursor = conn.cursor()
+    if phone and connected:
+        cursor.execute("UPDATE school_settings SET whatsapp_session_connected = ?, whatsapp_bot_phone = ? WHERE id = 1", (connected, phone))
+    else:
+        cursor.execute("UPDATE school_settings SET whatsapp_session_connected = ? WHERE id = 1", (connected,))
+    conn.commit()
+    conn.close()
+    return {"status": "updated"}
 
 @app.get("/api/whatsapp/webhook")
 async def verify_whatsapp_webhook(request: Request):
@@ -570,13 +632,16 @@ async def get_blueprint_whatsapp_share(blueprint_id: int):
     qr_target = f"https://wa.me/{teacher_phone}?text=BLUEPRINT" if teacher_phone else (meta.get("portal_url") if meta else wa_me_url)
     qr_code = bot_mgr.generate_qr_code_base64(qr_target)
 
+    bridge_status = bot_mgr.get_bridge_status()
+
     return {
         "blueprint_id": blueprint_id,
         "teacher_name": teacher_name,
         "teacher_phone": teacher_phone,
         "message": msg_text,
         "wa_me_url": wa_me_url,
-        "qr_code": qr_code
+        "qr_code": qr_code,
+        "bridge_connected": bridge_status.get("connected", False)
     }
 
 @app.post("/api/whatsapp/send-blueprint/{blueprint_id}")
@@ -598,20 +663,30 @@ async def send_blueprint_whatsapp(blueprint_id: int):
     if not teacher or not teacher.get("phone"):
         raise HTTPException(status_code=400, detail="Assigned teacher does not have a phone number registered.")
 
-    res = bot_mgr.send_meta_whatsapp_message(teacher["phone"], msg_text)
+    res = bot_mgr.send_message_smart(teacher["phone"], msg_text)
     if not res.get("success"):
-        raise HTTPException(status_code=500, detail=res.get("error", "Failed to send WhatsApp message via Meta Cloud API."))
+        raise HTTPException(status_code=500, detail=res.get("error", "Failed to send WhatsApp message."))
 
-    return {"status": "success", "message": f"Blueprint successfully sent to {teacher['name']} ({teacher['phone']}) on WhatsApp!"}
+    channel_name = "Linked WhatsApp Phone" if res.get("channel") == "linked_device" else "WhatsApp Cloud API"
+    return {
+        "status": "success", 
+        "channel": res.get("channel"),
+        "message": f"Blueprint successfully delivered to {teacher['name']} ({teacher['phone']}) via {channel_name}!"
+    }
 
 @app.post("/api/whatsapp/test-message")
 async def send_test_whatsapp_message(req: WhatsAppTestMessageRequest):
     bot_mgr = WhatsAppBotManager.get_instance()
     test_text = req.message or "Hello from Lord Krishna Convent School Exam Studio! WhatsApp Bot connection verified successfully. ✅"
-    res = bot_mgr.send_meta_whatsapp_message(req.to_phone, test_text)
+    res = bot_mgr.send_message_smart(req.to_phone, test_text)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", "Failed to deliver test message."))
-    return {"status": "success", "message": f"Test message delivered successfully to {req.to_phone}!"}
+    channel_name = "Linked WhatsApp Phone" if res.get("channel") == "linked_device" else "WhatsApp Cloud API"
+    return {
+        "status": "success", 
+        "channel": res.get("channel"), 
+        "message": f"Test message delivered successfully to {req.to_phone} via {channel_name}!"
+    }
 
 # --- Admin Authentication ---
 @app.post("/api/admin/login")
