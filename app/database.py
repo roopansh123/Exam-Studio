@@ -127,7 +127,9 @@ def init_db():
     if 'whatsapp_enabled' not in existing_cols:
         cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_enabled INTEGER DEFAULT 0")
     if 'whatsapp_mode' not in existing_cols:
-        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_mode TEXT DEFAULT 'hybrid'")
+        cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_mode TEXT DEFAULT 'barcode'")
+    else:
+        cursor.execute("UPDATE school_settings SET whatsapp_mode = 'barcode' WHERE whatsapp_mode = 'hybrid' OR whatsapp_mode IS NULL OR whatsapp_mode = ''")
     if 'whatsapp_bot_phone' not in existing_cols:
         cursor.execute("ALTER TABLE school_settings ADD COLUMN whatsapp_bot_phone TEXT DEFAULT ''")
     if 'whatsapp_phone_number_id' not in existing_cols:

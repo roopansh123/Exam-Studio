@@ -1,5 +1,5 @@
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode');
 const pino = require('pino');
@@ -19,9 +19,32 @@ if (!fs.existsSync(AUTH_DIR)) {
 }
 
 let sock = null;
+let isConnecting = false;
 let connectionStatus = 'initializing';
 let currentQrBase64 = null;
 let connectedPhone = null;
+
+// In-memory message store for Baileys retry and decryption requests
+const messageStore = new Map();
+function storeMessage(keyId, message) {
+    if (!keyId) return;
+    messageStore.set(keyId, message);
+    if (messageStore.size > 1000) {
+        const firstKey = messageStore.keys().next().value;
+        messageStore.delete(firstKey);
+    }
+}
+
+// Format phone number into E.164 digits
+function formatWaNumber(phone) {
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length === 10 && /^[6-9]/.test(digits)) {
+        digits = '91' + digits;
+    } else if (digits.length === 11 && digits.startsWith('0')) {
+        digits = '91' + digits.slice(1);
+    }
+    return digits;
+}
 
 // Allow dynamic reconfiguration of Python backend port
 app.post('/configure', (req, res) => {
@@ -85,7 +108,7 @@ async function forwardMessageToPython(fromPhone, text) {
                 });
             });
             req.on('error', (err) => {
-                console.error('Failed to forward message to Python backend:', err.message);
+                console.error('[WhatsApp Bridge] Failed to forward message to Python backend:', err.message);
                 resolve(null);
             });
             req.write(payload);
@@ -97,15 +120,33 @@ async function forwardMessageToPython(fromPhone, text) {
 }
 
 async function connectToWhatsApp() {
+    if (isConnecting) return;
+    isConnecting = true;
+
+    if (sock) {
+        try {
+            sock.ev.removeAllListeners();
+            sock.end();
+        } catch (e) {}
+        sock = null;
+    }
+
     try {
         const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
         sock = makeWASocket({
             auth: state,
-            logger: pino({ level: 'silent' }),
+            logger: pino({ level: 'warn' }),
             printQRInTerminal: false,
-            browser: ['LKCS Exam Studio', 'Desktop', '2.0.0'],
-            syncFullHistory: false
+            browser: Browsers.macOS('Desktop'),
+            syncFullHistory: false,
+            markOnlineOnConnect: true,
+            getMessage: async (key) => {
+                if (key && key.id && messageStore.has(key.id)) {
+                    return messageStore.get(key.id);
+                }
+                return { conversation: '' };
+            }
         });
 
         sock.ev.on('connection.update', async (update) => {
@@ -129,7 +170,7 @@ async function connectToWhatsApp() {
             }
 
             if (connection === 'close') {
-                const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut;
                 console.log(`[WhatsApp Bridge] Connection closed (status: ${statusCode}). Reconnecting: ${!isLoggedOut}`);
                 
@@ -149,22 +190,23 @@ async function connectToWhatsApp() {
                     } catch (e) {}
                 }
 
-                // Reconnect after brief pause unless logged out
                 setTimeout(() => {
+                    isConnecting = false;
                     connectToWhatsApp();
-                }, isLoggedOut ? 1000 : 3000);
+                }, isLoggedOut ? 1500 : 2500);
 
             } else if (connection === 'open') {
                 connectionStatus = 'connected';
                 currentQrBase64 = null;
                 connectedPhone = sock.user?.id ? sock.user.id.split(':')[0] : 'connected';
-                console.log(`[WhatsApp Bridge] Successfully connected to WhatsApp! Account: ${connectedPhone}`);
+                console.log(`[WhatsApp Bridge] Successfully connected to WhatsApp! Account: +${connectedPhone}`);
 
                 notifyPythonBackend('/api/whatsapp/internal/status', {
                     status: 'connected',
                     connected: true,
                     phone: connectedPhone
                 });
+                isConnecting = false;
             }
         });
 
@@ -175,7 +217,6 @@ async function connectToWhatsApp() {
             if (type !== 'notify') return;
 
             for (const msg of messages) {
-                // Ignore messages sent by bot itself or status broadcasts
                 if (msg.key.fromMe) continue;
                 const remoteJid = msg.key.remoteJid;
                 if (!remoteJid || remoteJid.includes('@broadcast') || remoteJid.includes('@g.us')) continue;
@@ -194,7 +235,10 @@ async function connectToWhatsApp() {
                 const replyText = await forwardMessageToPython(fromPhone, text.trim());
                 if (replyText) {
                     try {
-                        await sock.sendMessage(remoteJid, { text: replyText });
+                        const replySent = await sock.sendMessage(remoteJid, { text: replyText });
+                        if (replySent?.key?.id) {
+                            storeMessage(replySent.key.id, replySent.message);
+                        }
                         console.log(`[WhatsApp Bridge] Sent auto-reply to ${fromPhone}`);
                     } catch (err) {
                         console.error(`[WhatsApp Bridge] Error sending reply to ${fromPhone}:`, err.message);
@@ -206,6 +250,7 @@ async function connectToWhatsApp() {
     } catch (err) {
         console.error('[WhatsApp Bridge] Fatal error in connectToWhatsApp:', err);
         connectionStatus = 'error';
+        isConnecting = false;
         setTimeout(connectToWhatsApp, 5000);
     }
 }
@@ -227,21 +272,66 @@ app.post('/send-message', async (req, res) => {
     const { phone, message } = req.body;
 
     if (connectionStatus !== 'connected' || !sock) {
-        return res.status(400).json({ success: false, error: 'WhatsApp is not connected yet. Please scan the barcode first.' });
+        return res.status(400).json({ 
+            success: false, 
+            error: 'WhatsApp is not connected yet. Please scan the barcode with your phone first.' 
+        });
     }
 
     if (!phone || !message) {
-        return res.status(400).json({ success: false, error: 'Recipient phone and message are required.' });
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Recipient phone and message are required.' 
+        });
+    }
+
+    const cleanPhone = formatWaNumber(phone);
+    if (!cleanPhone || cleanPhone.length < 8) {
+        return res.status(400).json({ 
+            success: false, 
+            error: `Invalid recipient phone number: ${phone}` 
+        });
     }
 
     try {
-        const cleanPhone = phone.replace(/\D/g, '');
-        const jid = `${cleanPhone}@s.whatsapp.net`;
-        await sock.sendMessage(jid, { text: message });
-        return res.json({ success: true, message: `Delivered message to ${cleanPhone}` });
+        console.log(`[WhatsApp Bridge] Verifying WhatsApp account for +${cleanPhone}...`);
+        let targetJid = `${cleanPhone}@s.whatsapp.net`;
+
+        try {
+            const onWaList = await sock.onWhatsApp(cleanPhone);
+            console.log(`[WhatsApp Bridge] onWhatsApp result for ${cleanPhone}:`, JSON.stringify(onWaList));
+
+            if (!onWaList || onWaList.length === 0 || !onWaList[0]?.exists) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Phone number +${cleanPhone} is not registered on WhatsApp. Please check the recipient's phone number.`
+                });
+            }
+            targetJid = onWaList[0].jid;
+        } catch (checkErr) {
+            console.warn(`[WhatsApp Bridge] onWhatsApp lookup warning:`, checkErr.message);
+        }
+
+        console.log(`[WhatsApp Bridge] Delivering message to ${targetJid}...`);
+        const sent = await sock.sendMessage(targetJid, { text: message });
+
+        if (sent?.key?.id) {
+            storeMessage(sent.key.id, sent.message);
+            console.log(`[WhatsApp Bridge] Successfully transmitted message to ${targetJid} (Msg ID: ${sent.key.id})`);
+        }
+
+        return res.json({ 
+            success: true, 
+            message: `Delivered message to +${cleanPhone}`,
+            jid: targetJid,
+            message_id: sent?.key?.id || null
+        });
     } catch (err) {
-        console.error('[WhatsApp Bridge] Error sending message:', err);
-        return res.status(500).json({ success: false, error: err.message });
+        console.error(`[WhatsApp Bridge] Error sending message to ${cleanPhone}:`, err);
+        return res.status(500).json({ 
+            success: false, 
+            error: `Failed to deliver WhatsApp message: ${err.message}` 
+        });
     }
 });
 

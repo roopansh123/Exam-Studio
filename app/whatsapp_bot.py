@@ -98,12 +98,14 @@ class WhatsAppBotManager:
 
         try:
             logger.info("Spawning WhatsApp Baileys Barcode Bridge microservice...")
+            log_path = os.path.join(self._bridge_dir, "bridge.log")
+            self._bridge_log_file = open(log_path, "a", encoding="utf-8")
             self._bridge_proc = subprocess.Popen(
                 [node_bin, server_script],
                 cwd=self._bridge_dir,
                 env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stdout=self._bridge_log_file,
+                stderr=self._bridge_log_file
             )
             # Wait up to 4 seconds for port 3001 to open
             for _ in range(20):

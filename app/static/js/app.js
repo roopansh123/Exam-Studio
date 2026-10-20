@@ -2600,7 +2600,10 @@ async function loadWhatsAppSettings() {
         if (enabledSelect) enabledSelect.value = whatsAppSettings.whatsapp_enabled ? '1' : '0';
 
         const modeSelect = document.getElementById('wa-setting-mode');
-        if (modeSelect) modeSelect.value = whatsAppSettings.whatsapp_mode || 'barcode';
+        if (modeSelect) {
+            const validModes = ['barcode', 'direct', 'cloud_api'];
+            modeSelect.value = validModes.includes(whatsAppSettings.whatsapp_mode) ? whatsAppSettings.whatsapp_mode : 'barcode';
+        }
 
         const botPhone = document.getElementById('wa-setting-bot-phone');
         if (botPhone) botPhone.value = whatsAppSettings.whatsapp_bot_phone || '';
