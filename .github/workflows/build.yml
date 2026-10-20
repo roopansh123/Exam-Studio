@@ -32,6 +32,11 @@ jobs:
         run: |
           python -m app.database
 
+      - name: Download Cloudflare Tunnel Binary (cloudflared.exe)
+        run: |
+          New-Item -ItemType Directory -Force -Path app\bin
+          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "app\bin\cloudflared.exe"
+
       - name: Build Windows Executable with PyInstaller
         run: |
           pyinstaller --clean --noconfirm LKCSExamStudio.spec

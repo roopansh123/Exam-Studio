@@ -11,6 +11,9 @@ added_files = [
     ('question_paper.db', '.'),
 ]
 
+if os.path.exists('app/bin'):
+    added_files.append(('app/bin', 'app/bin'))
+
 hidden_imports = [
     'anyio',
     'anyio._backends',

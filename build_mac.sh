@@ -41,6 +41,18 @@ fi
 echo "Using Python: $($ARCH_CMD $PYTHON --version)"
 echo "Using PyInstaller: $($ARCH_CMD $PYINSTALLER --version)"
 
+# Ensure cloudflared binary is prepared for macOS
+mkdir -p app/bin
+CF_ARCH="arm64"
+if [[ "$TARGET_ARCH" == "x86_64" ]]; then
+    CF_ARCH="amd64"
+fi
+if [ ! -f "app/bin/cloudflared" ] || [ ! -x "app/bin/cloudflared" ]; then
+    echo "Downloading cloudflared (${CF_ARCH}) for macOS..."
+    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${CF_ARCH}.tgz" | tar -xz -C app/bin
+    chmod +x app/bin/cloudflared
+fi
+
 # Run PyInstaller
 echo "Running PyInstaller on macOS (Target: ${TARGET_ARCH:-Native})..."
 $ARCH_CMD $PYINSTALLER --clean --noconfirm LKCSExamStudio.spec

@@ -47,3 +47,8 @@ desktop.ini
 # Custom temporary folders
 scratch/
 .tempmediaStorage/
+
+# Binary executables for internet reverse tunnels (downloaded during build)
+app/bin/*
+!app/bin/.gitkeep
+

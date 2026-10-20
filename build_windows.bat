@@ -18,6 +18,13 @@ if exist "dist\EduPaperPro.exe" (
     del /f /q "dist\EduPaperPro.exe" >nul 2>&1
 )
 
+REM 1.5 Ensure cloudflared.exe is downloaded for tunnel support
+if not exist "app\bin\cloudflared.exe" (
+    echo Downloading cloudflared.exe for permanent internet tunnel...
+    if not exist "app\bin" mkdir "app\bin"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe', 'app\bin\cloudflared.exe')" >nul 2>&1
+)
+
 REM 2. Check for working pre-installed venv
 if exist "venv\Scripts\pyinstaller.exe" (
     "venv\Scripts\python.exe" -c "exit(0)" >nul 2>&1

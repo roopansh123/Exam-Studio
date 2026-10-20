@@ -361,17 +361,34 @@ async def update_wifi_settings(settings: WifiSettingsUpdate):
     return {"status": "success", "message": "Network & Wi-Fi settings updated successfully"}
 
 # --- Internet Tunnel Endpoints ---
+def _on_tunnel_url_changed(new_url, provider):
+    if not new_url:
+        return
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE school_settings SET public_url = ?, network_scope = 'any_network' WHERE id = 1",
+            (new_url,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+TunnelManager.get_instance().add_url_change_callback(_on_tunnel_url_changed)
+
+@app.get("/api/tunnel/heartbeat")
+async def tunnel_heartbeat():
+    return {"status": "alive", "time": datetime.utcnow().isoformat()}
+
 @app.post("/api/tunnel/start")
 async def start_tunnel(req: Optional[TunnelStartRequest] = None):
     subdomain = req.subdomain if req else None
     mgr = TunnelManager.get_instance()
     res = mgr.start_tunnel(port=8000, subdomain=subdomain)
     if res.get("url"):
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE school_settings SET public_url = ?, network_scope = 'any_network' WHERE id = 1", (res["url"],))
-        conn.commit()
-        conn.close()
+        _on_tunnel_url_changed(res["url"], res.get("provider", "unknown"))
     return res
 
 @app.post("/api/tunnel/stop")
